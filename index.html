@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>YEFREE · Mundo Social e Iglús</title>
+    <!-- Tailwind CSS & Google Fonts -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Mqtt.js para Multijugador Global Real -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cpBlue: '#0055a5',
+                        cpDarkBlue: '#003366',
+                        cpYellow: '#ffcc00',
+                        cpOrange: '#ff8800',
+                        cpSnow: '#eef8ff',
+                        cpIce: '#aee5ff'
+                    },
+                    fontFamily: {
+                        display: ['"Baloo 2"', 'sans-serif'],
+                        body: ['Outfit', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Outfit', sans-serif; background-color: #002244; color: #f8fafc; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+        .font-display { font-family: 'Baloo 2', cursive; }
+        .cp-button {
+            background: linear-gradient(180deg, #ffea00 0%, #ff9900 100%);
+            border: 3px solid #663300;
+            box-shadow: inset 0 2px 0 rgba(255,255,255,0.6), 0 4px 0 #442200;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        }
+        .cp-button:active {
+            transform: translateY(2px);
+            box-shadow: inset 0 1px 0 rgba(0,0,0,0.2), 0 2px 0 #442200;
+        }
+        .cp-button-green {
+            background: linear-gradient(180deg, #00e676 0%, #00a844 100%);
+            border: 3px solid #004d1a;
+            box-shadow: inset 0 2px 0 rgba(255,255,255,0.6), 0 4px 0 #003311;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        }
+        .cp-button-green:active {
+            transform: translateY(2px);
+            box-shadow: inset 0 1px 0 rgba(0,0,0,0.2), 0 2px 0 #003311;
+        }
+        .cp-box {
+            background: linear-gradient(180deg, #0066cc 0%, #004488 100%);
+            border: 4px solid #002244;
+            box-shadow: inset 0 3px 0 rgba(255,255,255,0.3), 0 6px 12px rgba(0,0,0,0.5);
+        }
+        canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #0055a5; border-radius: 9999px; border: 2px solid #002244; }
+
+        .tutorial-pulse-target {
+            animation: pulse-glow 1.5s infinite;
+            border-radius: 1rem;
+            position: relative;
+            z-index: 10000 !important;
+        }
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(255, 204, 0, 0.8); }
+            70% { box-shadow: 0 0 0 12px rgba(255, 204, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 204, 0, 0); }
+        }
+        #tutorial-tooltip-box:not(.hidden) { animation: tutPop .5s cubic-bezier(.2,1.5,.4,1); }
+        @keyframes tutPop { 0% { bottom: -90px; opacity: 0; } 100% { bottom: 1rem; opacity: 1; } }
+        .inf-bob { animation: infBob 1.3s ease-in-out infinite; }
+        @keyframes infBob { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-3px) rotate(2deg); } }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between">
+
+    <!-- INTRODUCCIÓN SECUENCIAL -->
+    <div id="intro-video-overlay" class="fixed inset-0 bg-black z-[70] flex flex-col items-center justify-center">
+        <video id="intro-video" class="w-full h-full object-cover hidden" muted playsinline preload="auto">
+            <source id="intro-video-source" src="yefree-intro1.mp4" type="video/mp4">
+            Tu navegador no soporta la reproducción de video.
+        </video>
+
+        <audio id="intro-audio" preload="auto">
+            <source src="yefree-audio.mp3" type="audio/mp3">
+        </audio>
+        
+        <div id="play-sound-prompt" onclick="startIntroWithAudio()" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-4 z-[72] p-4 text-center cursor-pointer">
+            <div>
+                <h3 class="font-display font-black text-3xl sm:text-4xl text-[#ffcc00] mb-2">🎬 YEFREE</h3>
+                <p class="text-sm text-cyan-200">Toca en cualquier parte para iniciar la intro</p>
+            </div>
+            <div class="cp-button text-[#442200] font-display font-black px-8 py-4 rounded-2xl text-lg shadow-2xl animate-bounce pointer-events-none">
+                🔊 TOCAR PARA JUGAR INTRO
+            </div>
+        </div>
+
+        <button onclick="skipIntroVideo(event)" class="absolute bottom-6 right-6 cp-button text-[#442200] font-display font-black px-4 sm:px-6 py-2 rounded-2xl text-xs sm:text-sm shadow-2xl z-[73]">Saltar Intro ⏭️</button>
+    </div>
+
+    <!-- FLECHA GUÍA FLOTANTE -->
+    <div id="tutorial-arrow" class="fixed z-[10002] text-3xl sm:text-4xl animate-bounce hidden drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">👇</div>
+
+    <!-- PANTALLA DE LOGIN / REGISTRO -->
+    <div id="auth-overlay" class="fixed inset-0 bg-[#001833]/95 backdrop-blur-lg z-50 flex items-center justify-center p-4">
+        <div class="cp-box w-full max-w-sm sm:max-w-md rounded-3xl p-5 sm:p-6 space-y-4 text-center shadow-2xl">
+            <div class="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-[#ffcc00] text-[#442200] font-display font-black text-3xl sm:text-4xl rounded-3xl border-4 border-[#663300] shadow-lg mb-1">Y</div>
+            <h2 class="font-display font-black text-2xl sm:text-3xl text-white tracking-wide">¡Bienvenido a YEFREE!</h2>
+            <p class="text-xs text-cyan-200">Ingresa tu usuario para conectarte al multijugador.</p>
+
+            <div class="space-y-3 text-left pt-1">
+                <div>
+                    <label class="text-xs font-bold text-cyan-200 block mb-1">Usuario o Correo:</label>
+                    <input id="auth-email" type="text" placeholder="Ej: Player123" class="w-full bg-[#002244] border-2 border-[#0066cc] rounded-2xl px-3 py-2 font-bold text-xs sm:text-sm text-white focus:outline-none focus:border-[#ffcc00]">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-cyan-200 block mb-1">Contraseña:</label>
+                    <input id="auth-password" type="password" placeholder="••••••••" class="w-full bg-[#002244] border-2 border-[#0066cc] rounded-2xl px-3 py-2 font-bold text-xs sm:text-sm text-white focus:outline-none focus:border-[#ffcc00]">
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2 pt-2">
+                <button onclick="handleLogin()" class="cp-button text-[#442200] font-display font-black py-2.5 rounded-2xl text-sm sm:text-base">Entrar / Crear Cuenta</button>
+                <button onclick="continueAsGuest()" class="text-xs text-cyan-300 font-bold underline hover:text-white transition mt-1">🎮 Modo Invitado</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MENÚ DE INICIO -->
+    <div id="main-home-menu" class="fixed inset-0 bg-[#001833] z-40 hidden flex flex-col p-4 sm:p-6 overflow-y-auto">
+        <div class="flex flex-wrap justify-between items-center bg-[#003366] p-3 sm:p-4 rounded-3xl border-4 border-[#002244] shadow-xl gap-3 mb-4 sm:mb-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-[#ffcc00] text-[#442200] font-display font-black text-2xl sm:text-3xl rounded-2xl flex items-center justify-center border-2 border-[#663300]">Y</div>
+                <div>
+                    <h1 class="font-display font-black text-lg sm:text-2xl text-white">YEFREE DASHBOARD</h1>
+                    <div class="flex items-center gap-2">
+                        <span id="multiplayer-status" class="w-2.5 h-2.5 rounded-full bg-yellow-400"></span>
+                        <p id="multiplayer-status-text" class="text-[10px] sm:text-xs text-cyan-200 font-semibold">Conectando servomecanismo en vivo...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-4">
+                <div id="nav-coins-box" class="flex items-center gap-1.5 bg-[#002244] border-2 border-[#0066cc] px-3 py-1 rounded-2xl">
+                    <span class="text-xl">🪙</span>
+                    <span class="font-display font-black text-lg sm:text-xl text-[#ffcc00]" id="home-coin-counter">0</span>
+                </div>
+                <button onclick="handleLogout()" class="bg-red-600 hover:bg-red-700 text-white font-display font-black px-3 py-1.5 rounded-xl text-xs">Salir</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 flex-1 items-stretch pb-4">
+            <div class="cp-box rounded-3xl p-4 sm:p-6 flex flex-col items-center justify-between text-center shadow-2xl">
+                <div class="w-full">
+                    <span class="text-[10px] sm:text-xs font-bold text-cyan-200 uppercase tracking-widest block mb-1">Tu Perfil</span>
+                    <h2 id="home-profile-name" class="font-display font-black text-xl sm:text-2xl text-[#ffcc00]">Invitado</h2>
+                </div>
+
+                <div class="bg-[#002244] border-4 border-[#004488] rounded-2xl p-2 sm:p-4 my-3 flex items-center justify-center w-full min-h-[140px] sm:min-h-[180px]">
+                    <canvas id="homePreviewCanvas" width="140" height="140" class="block"></canvas>
+                </div>
+
+                <button id="nav-customizer-btn" onclick="openCustomizerModal()" class="w-full cp-button text-[#442200] font-display font-black py-2.5 rounded-2xl text-xs sm:text-sm">👕 Personalizar Avatar</button>
+            </div>
+
+            <div class="cp-box rounded-3xl p-5 sm:p-6 flex flex-col items-center justify-center text-center space-y-4 shadow-2xl border-4 border-[#00f0ff]/40">
+                <div class="text-5xl sm:text-6xl animate-bounce">🤖</div>
+                <div>
+                    <h2 class="font-display font-black text-2xl sm:text-3xl text-white">¡Mundo YEFREE!</h2>
+                    <p class="text-xs text-cyan-100 max-w-xs mt-1 font-medium">Explora las distintas salas, chatea y diviértete con otros jugadores.</p>
+                </div>
+                
+                <button id="nav-play-btn" onclick="startGameFromMenu()" class="w-full max-w-xs cp-button-green text-white font-display font-black py-3.5 sm:py-4 rounded-3xl text-xl sm:text-2xl tracking-wider transition transform hover:scale-105 shadow-2xl flex items-center justify-center gap-3">
+                    <span>▶ JUGAR</span>
+                </button>
+            </div>
+
+            <div class="cp-box rounded-3xl p-4 sm:p-6 flex flex-col justify-between shadow-2xl space-y-3">
+                <div>
+                    <h3 class="font-display font-black text-lg sm:text-xl text-[#ffcc00] mb-2">🚀 Acceso Rápido</h3>
+                    <div class="space-y-2">
+                        <button id="nav-codes-btn" onclick="openCodeModal()" class="w-full bg-[#004488] hover:bg-[#0055a5] border-2 border-[#002244] p-2.5 sm:p-3 rounded-2xl flex items-center gap-3 text-left transition">
+                            <span class="text-xl sm:text-2xl">🎁</span>
+                            <div>
+                                <div class="font-display font-black text-white text-xs sm:text-sm">Canjear Códigos</div>
+                                <div class="text-[9px] sm:text-[10px] text-cyan-200">Usa códigos para ganar monedas</div>
+                            </div>
+                        </button>
+                        <button onclick="openIglooDirectoryModal()" class="w-full bg-[#004488] hover:bg-[#0055a5] border-2 border-[#002244] p-2.5 sm:p-3 rounded-2xl flex items-center gap-3 text-left transition">
+                            <span class="text-xl sm:text-2xl">🏠</span>
+                            <div>
+                                <div class="font-display font-black text-white text-xs sm:text-sm">Visitar Iglús</div>
+                                <div class="text-[9px] sm:text-[10px] text-cyan-200">Explora iglús de la isla</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-2.5 bg-[#002244] rounded-2xl border-2 border-[#0066cc] text-center">
+                    <span class="text-[10px] font-bold text-cyan-200">💡 Tip:</span>
+                    <p class="text-[10px] sm:text-[11px] text-white mt-0.5">¡Camina sobre las monedas <Y> en la Plaza para ganar dinero gratis!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HEADER PRINCIPAL DEL JUEGO -->
+    <header class="h-14 sm:h-16 bg-[#004488] border-b-4 border-[#002244] px-3 sm:px-4 flex items-center justify-between z-30 shadow-lg shrink-0">
+        <div class="flex items-center gap-2 sm:gap-4">
+            <div class="flex items-center gap-1.5 cursor-pointer" onclick="returnToHomeMenu()">
+                <span class="w-8 h-8 sm:w-10 sm:h-10 bg-[#ffcc00] text-[#442200] font-display font-black text-xl sm:text-2xl rounded-xl sm:rounded-2xl flex items-center justify-center border-2 border-[#663300]">Y</span>
+                <span class="font-display font-black text-lg sm:text-2xl tracking-wide text-white">YEFREE</span>
+            </div>
+            <nav class="hidden md:flex items-center gap-2 font-display font-extrabold text-sm">
+                <button onclick="returnToHomeMenu()" class="px-3 py-1 rounded-xl bg-[#0066cc] text-white">🏠 Menú</button>
+                <button onclick="switchRoom('plaza')" id="btn-mundo" class="px-3 py-1 rounded-xl cp-button text-[#442200]">🌍 Mundo</button>
+                <button onclick="switchTab('casa')" id="btn-casa" class="px-3 py-1 rounded-xl bg-[#0066cc] text-white">🏠 Mi Iglú</button>
+                <button onclick="openIglooDirectoryModal()" class="px-3 py-1 rounded-xl bg-[#0066cc] text-white">🌀 Iglús</button>
+                <button onclick="mgOpen()" class="px-3 py-1 rounded-xl cp-button-green text-white">🎮 Juegos</button>
+            </nav>
+        </div>
+        <div class="flex items-center gap-2 sm:gap-3">
+            <button onclick="startInteractiveTutorial()" class="bg-[#00b0ff] text-white font-display font-black px-2.5 py-1 rounded-xl text-xs">❓ Guía</button>
+            <div class="flex items-center gap-1 bg-[#002244]/60 border-2 border-[#0066cc] px-2.5 py-1 rounded-xl">
+                <span class="text-base sm:text-xl">🪙</span>
+                <span class="font-display font-black text-sm sm:text-lg text-[#ffcc00]" id="coin-counter">0</span>
+            </div>
+            <button onclick="openProfileModal()" class="flex items-center gap-1 bg-[#ff8800] border-2 border-[#663300] px-2.5 py-1 rounded-xl font-display font-black text-white text-xs sm:text-sm">
+                <span>👤</span>
+                <span id="player-avatar-name" class="max-w-[70px] sm:max-w-[100px] truncate">Invitado</span>
+            </button>
+            <button onclick="handleLogout()" class="bg-red-600 text-white font-display font-black px-2 py-1 rounded-xl text-xs hidden sm:block">Salir</button>
+        </div>
+    </header>
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <main class="flex-1 relative flex overflow-hidden">
+        <div id="view-mundo" class="absolute inset-0 flex flex-col md:flex-row">
+            <div class="flex-1 relative overflow-hidden bg-[#aee5ff]">
+                <canvas id="gameCanvas" class="w-full h-full block cursor-crosshair touch-none"></canvas>
+
+                <div class="absolute top-2 left-2 right-2 flex justify-between items-center pointer-events-none">
+                    <div class="flex gap-1.5 pointer-events-auto">
+                        <div class="cp-box px-3 py-1 rounded-xl text-xs font-display font-extrabold text-white flex items-center gap-1.5">
+                            📍 <span id="current-room-name" class="text-[#ffcc00]">Plaza Nevada</span>
+                        </div>
+                        <button onclick="openMapModal()" class="cp-button px-3 py-1 rounded-xl text-xs font-display font-extrabold text-[#442200]">🗺️ Mapa</button>
+                        <button onclick="openCustomizerModal()" class="cp-button px-3 py-1 rounded-xl text-xs font-display font-extrabold text-[#442200] hidden sm:block">👕 Look</button>
+                    </div>
+                </div>
+
+                <div class="absolute bottom-3 left-3 right-3 flex gap-2 lg:hidden pointer-events-auto z-20">
+                    <input id="mobile-chat-input" type="text" maxlength="120" placeholder="Escribe un mensaje..." class="flex-1 bg-[#002244]/90 border-2 border-[#0066cc] rounded-xl px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-[#ffcc00]">
+                    <button onclick="sendMobileChatMessage()" class="cp-button text-[#442200] font-display font-black px-4 py-2 rounded-xl text-xs">Enviar</button>
+                </div>
+            </div>
+
+            <aside class="w-80 bg-[#003366] border-l-4 border-[#002244] flex-col hidden lg:flex shadow-2xl">
+                <div class="p-3 bg-[#004488] border-b-2 border-[#002244] flex justify-between items-center">
+                    <h3 class="font-display font-black text-base text-white tracking-wide">💬 Chat Global</h3>
+                    <span class="text-[11px] bg-[#002244] px-2.5 py-0.5 rounded-full text-cyan-300 font-bold">En línea</span>
+                </div>
+                <div id="chat-messages" class="flex-1 p-3 overflow-y-auto space-y-2.5 text-sm bg-[#002b55]/50">
+                    <div class="leading-snug bg-[#003366] p-2 rounded-xl border border-cyan-500/20">
+                        <div class="flex items-baseline gap-2">
+                            <span class="font-display text-xs font-extrabold text-[#ffcc00]">YefitoBot</span>
+                        </div>
+                        <p class="text-white mt-0.5 text-xs font-medium">¡Bienvenido al servidor multijugador global!</p>
+                    </div>
+                </div>
+                <div class="p-3 bg-[#004488] border-t-2 border-[#002244]">
+                    <div class="flex gap-2">
+                        <input id="chat-input" type="text" maxlength="120" placeholder="Escribe tu mensaje..." class="flex-1 bg-[#002244] border-2 border-[#0066cc] rounded-xl px-3 py-1.5 text-sm font-semibold text-white focus:outline-none focus:border-[#ffcc00]">
+                        <button onclick="sendChatMessage()" class="cp-button text-[#442200] font-display font-black px-3 py-1.5 rounded-xl transition">Enviar</button>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <div id="view-casa" class="absolute inset-0 bg-[#002244] hidden flex flex-col">
+            <div class="p-3 sm:p-4 bg-[#003366] border-b-4 border-[#001122] flex flex-wrap justify-between items-center gap-2 shrink-0">
+                <div>
+                    <h2 id="igloo-owner-title" class="font-display font-black text-lg sm:text-2xl text-[#ffcc00] flex items-center gap-2">🏠 Iglú</h2>
+                    <p class="text-[10px] sm:text-xs text-cyan-200">Visita o decora iglús en línea.</p>
+                </div>
+                <div class="flex gap-1.5 sm:gap-2">
+                    <button onclick="togglePublicIgloo()" id="btn-toggle-public" class="bg-[#0088cc] border-2 border-[#004488] text-white font-display font-black px-2.5 py-1.5 rounded-xl text-[10px] sm:text-xs">🌐 Público</button>
+                    <button onclick="toggleEditIgloo()" id="btn-edit-igloo" class="bg-[#9900cc] border-2 border-[#440066] text-white font-display font-black px-3 py-1.5 rounded-xl text-xs sm:text-sm">🛠️ Editar</button>
+                    <button onclick="openFurnitureShop()" class="cp-button text-[#442200] font-display font-black px-3 py-1.5 rounded-xl text-xs sm:text-sm">🛒 Tienda</button>
+                </div>
+            </div>
+            <div class="flex-1 relative overflow-hidden flex items-center justify-center bg-[#001833]">
+                <canvas id="iglooCanvas" class="w-full h-full block cursor-crosshair touch-none"></canvas>
+                <div id="edit-mode-banner" class="absolute top-3 cp-box px-4 py-1.5 rounded-xl text-[11px] sm:text-xs font-display font-black text-[#ffcc00] shadow-2xl hidden animate-bounce">
+                    Modo Edición: Toca donde quieras colocar el mueble.
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- PANEL TUTORIAL INFONITO -->
+    <div id="tutorial-tooltip-box" class="fixed bottom-4 left-4 right-4 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-xl cp-box rounded-3xl p-4 sm:p-5 z-[10003] hidden flex items-center gap-3 sm:gap-5 shadow-2xl border-4 border-[#ffcc00]">
+        <div class="w-16 h-16 sm:w-20 sm:h-20 bg-[#001833] border-4 border-[#ffcc00] rounded-2xl overflow-hidden shrink-0 flex items-center justify-center relative shadow-inner inf-bob">
+            <canvas id="infonitoCanvas" width="80" height="80" class="block"></canvas>
+        </div>
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+                <span class="font-display font-black text-sm sm:text-base text-[#ffcc00]">Infonito</span>
+                <span class="text-[9px] sm:text-[10px] bg-[#002244] text-cyan-300 px-2 py-0.5 rounded-full font-bold">12h / Sueldo Mínimo 💀</span>
+            </div>
+            <h4 id="fc-tut-title" class="font-display font-black text-sm sm:text-lg text-white mt-0.5 truncate">¡Hola! Soy Infonito.</h4>
+            <p id="fc-tut-desc" class="text-[11px] sm:text-xs text-cyan-100 font-medium mt-0.5 leading-snug min-h-[4.6em]">Sigue la flecha.</p>
+            <div id="fc-tut-dots" class="flex gap-1.5 mt-1"></div>
+        </div>
+        <button onclick="skipTutorial()" class="bg-red-600 hover:bg-red-700 text-white font-display font-black px-2.5 py-1.5 rounded-xl text-[10px] sm:text-xs self-start">Omitir</button>
+    </div>
+
+    <!-- MODALES GENERALES -->
+    <div id="code-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="cp-box w-full max-w-sm rounded-3xl p-5 space-y-4 text-center">
+            <div class="flex justify-between items-center border-b-2 border-[#002244] pb-2">
+                <h3 class="font-display font-black text-xl text-[#ffcc00]">🎁 Canjear Código</h3>
+                <button onclick="closeCodeModal()" class="text-white font-black text-lg">✕</button>
+            </div>
+            <p class="text-xs text-cyan-200">Ingresa tu código promocional.</p>
+            <input id="input-promo-code" type="text" placeholder="Ej: 1234" class="w-full bg-[#002244] border-2 border-[#0066cc] rounded-2xl px-4 py-2 font-display font-black text-center text-lg text-white focus:outline-none focus:border-[#ffcc00] uppercase">
+            <div id="code-feedback" class="text-xs font-bold hidden"></div>
+            <button onclick="redeemCode()" class="w-full cp-button text-[#442200] font-display font-black py-2.5 rounded-2xl text-sm">Canjear</button>
+        </div>
+    </div>
+
+    <div id="customizer-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="cp-box w-full max-w-lg rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b-2 border-[#002244] pb-2">
+                <h3 class="font-display font-black text-xl text-[#ffcc00]">👕 Personalizador</h3>
+                <button id="customizer-close-btn" onclick="closeCustomizerModal()" class="text-white font-black text-lg">✕</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="bg-[#002244] border-4 border-[#004488] rounded-2xl p-3 flex flex-col items-center justify-center min-h-[160px]">
+                    <canvas id="previewCanvas" width="150" height="150" class="block"></canvas>
+                </div>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs font-bold text-cyan-200 block mb-1">Color de Cuerpo:</label>
+                        <div class="flex gap-1.5 flex-wrap">
+                            <button onclick="setPlayerColor('#ffcc00')" class="w-7 h-7 rounded-full bg-[#ffcc00] border-2 border-white"></button>
+                            <button onclick="setPlayerColor('#00f0ff')" class="w-7 h-7 rounded-full bg-[#00f0ff] border-2 border-white"></button>
+                            <button onclick="setPlayerColor('#ff4488')" class="w-7 h-7 rounded-full bg-[#ff4488] border-2 border-white"></button>
+                            <button onclick="setPlayerColor('#22cc55')" class="w-7 h-7 rounded-full bg-[#22cc55] border-2 border-white"></button>
+                            <button onclick="setPlayerColor('#aa44ff')" class="w-7 h-7 rounded-full bg-[#aa44ff] border-2 border-white"></button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-cyan-200 block mb-1">Sombrero:</label>
+                        <select onchange="setPlayerHat(this.value)" id="select-player-hat" class="w-full bg-[#002244] border-2 border-[#0066cc] rounded-xl px-3 py-1 text-xs font-bold text-white">
+                            <option value="none">Ninguno</option>
+                            <option value="cap">Gorra</option>
+                            <option value="tophat">Sombrero de Copa</option>
+                            <option value="headphones">Audífonos Neón</option>
+                            <option value="glasses">Lentes de Sol</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <button onclick="saveAndCloseCustomizer()" class="w-full cp-button text-[#442200] font-display font-black py-2.5 rounded-2xl text-sm">Guardar y Cerrar</button>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="cp-box w-full max-w-sm rounded-3xl p-5 space-y-4">
+            <div class="flex justify-between items-center border-b-2 border-[#002244] pb-2">
+                <h3 class="font-display font-black text-xl text-[#ffcc00]">👤 Perfil</h3>
+                <button onclick="closeProfileModal()" class="text-white font-black text-lg">✕</button>
+            </div>
+            <div>
+                <label class="text-xs font-bold text-cyan-200 block mb-1">Nombre:</label>
+                <input id="input-username" type="text" maxlength="16" class="w-full bg-[#002244] border-2 border-[#0066cc] rounded-2xl px-3 py-2 font-display font-black text-base text-white focus:outline-none focus:border-[#ffcc00]">
+            </div>
+            <button onclick="saveProfileName()" class="w-full cp-button text-[#442200] font-display font-black py-2.5 rounded-2xl text-sm">Guardar</button>
+        </div>
+    </div>
+
+    <div id="igloo-directory-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="cp-box w-full max-w-md rounded-3xl p-5 space-y-3">
+            <div class="flex justify-between items-center border-b-2 border-[#002244] pb-2">
+                <h3 class="font-display font-black text-xl text-[#ffcc00]">🌀 Iglús</h3>
+                <button onclick="closeIglooDirectoryModal()" class="text-white font-black text-lg">✕</button>
+            </div>
+            <div id="igloo-list-container" class="grid grid-cols-1 gap-2.5 max-h-60 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <!-- MAPA ACTUALIZADO CON SALAS MEJORADAS -->
+    <div id="map-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="cp-box w-full max-w-sm rounded-3xl p-5 space-y-3">
+            <div class="flex justify-between items-center border-b-2 border-[#002244] pb-2">
+                <h3 class="font-display font-black text-xl text-[#ffcc00]">🗺️ Mapa de la Isla</h3>
+                <button onclick="closeMapModal()" class="text-white font-black text-lg">✕</button>
+            </div>
+            <div class="grid grid-cols-1 gap-2">
+                <button onclick="switchRoom('plaza'); closeMapModal();" class="p-3 bg-[#004488] hover:bg-[#0055a5] border-2 border-[#002244] rounded-2xl text-left font-display font-black text-[#ffcc00] text-base flex items-center justify-between">
+                    <span>🏔️ Plaza Nevada</span>
+                    <span class="text-xs text-cyan-200">Principal</span>
+                </button>
+                <button onclick="switchRoom('discoteca'); closeMapModal();" class="p-3 bg-[#004488] hover:bg-[#0055a5] border-2 border-[#002244] rounded-2xl text-left font-display font-black text-pink-400 text-base flex items-center justify-between">
+                    <span>🪩 Discoteca (Night Club)</span>
+                    <span class="text-xs text-cyan-200">Luces & DJ</span>
+                </button>
+                <button onclick="switchRoom('cafeteria'); closeMapModal();" class="p-3 bg-[#004488] hover:bg-[#0055a5] border-2 border-[#002244] rounded-2xl text-left font-display font-black text-amber-300 text-base flex items-center justify-between">
+                    <span>☕ Cafetería</span>
+                    <span class="text-xs text-cyan-200">Café & Snacks</span>
+                </button>
+                <button onclick="switchRoom('centro'); closeMapModal();" class="p-3 bg-[#004488] hover:bg-[#0055a5] border-2 border-[#002244] rounded-2xl text-left font-display font-black text-cyan-300 text-base flex items-center justify-between">
+                    <span>🏙️ Centro / Town</span>
+                    <span class="text-xs text-cyan-200">Tiendas</span>
+                </button>
+                <button onclick="mgOpen(); closeMapModal();" class="p-3 bg-[#0a7a3a] hover:bg-[#0c9a48] border-2 border-[#002244] rounded-2xl text-left font-display font-black text-white text-base flex items-center justify-between">
+                    <span>🎮 Minijuegos</span>
+                    <span class="text-xs text-cyan-100">Gana monedas</span>
+                </button>
+                <button onclick="teleportToMyIgloo(); closeMapModal();" class="p-3 bg-[#003366] hover:bg-[#004488] border-2 border-[#001122] rounded-2xl text-left font-display font-black text-purple-300 text-base flex items-center justify-between">
+                    <span>🏠 Mi Iglú Personal</span>
+                    <span class="text-xs text-cyan-200">Tu casa</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="furniture-shop-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="cp-box w-full max-w-md rounded-3xl p-5 space-y-3">
+            <div class="flex justify-between items-center border-b-2 border-[#002244] pb-2">
+                <h3 class="font-display font-black text-xl text-[#ffcc00]">🛒 Tienda</h3>
+                <button onclick="closeFurnitureShop()" class="text-white font-black text-lg">✕</button>
+            </div>
+            <div class="grid grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+                <div class="bg-[#004488] border-2 border-[#002244] rounded-2xl p-3 flex flex-col justify-between text-center">
+                    <div>
+                        <div class="text-3xl mb-1">🛋️</div>
+                        <h4 class="font-display font-black text-white text-sm">Sillón Club</h4>
+                    </div>
+                    <button onclick="buyFurniture('Sillón Club', '🛋️', 30)" class="cp-button text-[#442200] font-display font-black py-1.5 rounded-xl text-xs mt-2">30 🪙 Comprar</button>
+                </div>
+                <div class="bg-[#004488] border-2 border-[#002244] rounded-2xl p-3 flex flex-col justify-between text-center">
+                    <div>
+                        <div class="text-3xl mb-1">🪩</div>
+                        <h4 class="font-display font-black text-white text-sm">Esfera Disco</h4>
+                    </div>
+                    <button onclick="buyFurniture('Esfera Disco', '🪩', 50)" class="cp-button text-[#442200] font-display font-black py-1.5 rounded-xl text-xs mt-2">50 🪙 Comprar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MINIJUEGOS -->
+    <div id="mg-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-[65] hidden flex items-center justify-center p-3">
+        <div class="cp-box w-full max-w-sm rounded-3xl p-4 text-center space-y-2">
+            <div class="flex justify-between items-center">
+                <h3 id="mg-title" class="font-display font-black text-xl text-[#ffcc00]">🎮 Minijuegos</h3>
+                <button onclick="mgClose()" class="cp-button text-[#442200] font-display font-black px-3 rounded-xl">✕</button>
+            </div>
+            <div id="mg-menu" class="grid gap-2 pt-1">
+                <button onclick="mgStart('tiro')" class="cp-button text-[#442200] font-display font-black py-3 rounded-2xl text-lg">🎯 Tiro de Nieve</button>
+                <button onclick="mgStart('dance')" class="cp-button text-[#442200] font-display font-black py-3 rounded-2xl text-lg">💃 Dance Contest</button>
+                <button onclick="mgStart('simon')" class="cp-button text-[#442200] font-display font-black py-3 rounded-2xl text-lg">🧠 Simón Puffle</button>
+                <p class="text-xs text-cyan-200">¡Gana monedas 🪙 jugando!</p>
+            </div>
+            <div id="mg-play" class="hidden">
+                <canvas id="mg-canvas" width="340" height="400" class="w-full rounded-2xl border-4 border-[#002244] touch-none"></canvas>
+                <p id="mg-hint" class="text-xs text-cyan-200 mt-2"></p>
+                <button onclick="mgMenu()" class="cp-button-green text-white font-display font-black px-4 py-1 rounded-xl text-sm mt-2">← Juegos</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RADIO YEFREE -->
+    <button id="music-btn" onclick="musPanelToggle()" title="Música" class="fixed bottom-3 right-3 z-[60] w-11 h-11 rounded-full cp-button text-xl flex items-center justify-center">🎵</button>
+    <div id="music-panel" class="fixed bottom-16 right-3 z-[60] hidden cp-box rounded-2xl p-3 w-64 space-y-2 text-center">
+        <div class="font-display font-black text-[#ffcc00] text-sm">🎵 Radio YEFREE</div>
+        <div id="mus-now" class="text-white font-display font-black text-sm truncate">—</div>
+        <div class="flex justify-center gap-2 font-display font-black">
+            <button onclick="musNext(-1)" class="cp-button text-[#442200] px-2.5 py-1 rounded-xl">⏮</button>
+            <button id="mus-play" onclick="musToggle()" class="cp-button-green text-white px-3 py-1 rounded-xl">▶</button>
+            <button onclick="musNext(1)" class="cp-button text-[#442200] px-2.5 py-1 rounded-xl">⏭</button>
+            <button id="mus-mute" onclick="musMute()" class="cp-button text-[#442200] px-2.5 py-1 rounded-xl">🔊</button>
+        </div>
+        <input id="mus-vol" type="range" min="0" max="100" value="50" oninput="musVolSet(this.value / 100)" class="w-full accent-yellow-400">
+        <label class="flex items-center justify-center gap-2 text-xs text-cyan-100 font-bold"><input id="mus-auto" type="checkbox" checked onchange="musAuto(this.checked)"> Música por sala</label>
+        <div id="mus-list" class="grid gap-1"></div>
+    </div>
+    <div id="music-toast" style="opacity:0" class="fixed top-20 left-1/2 -translate-x-1/2 z-[61] cp-box rounded-full px-4 py-1 font-display font-black text-sm text-white pointer-events-none transition-opacity duration-500 whitespace-nowrap"></div>
+
+    <!-- SCRIPT COMPLETO CON SALAS REDISEÑADAS Y MULTIJUGADOR -->
+    <script>
+        let currentUserKey = null;
+        let mqttClient = null;
+        let playerId = 'player_' + Math.floor(Math.random() * 1000000);
+        let remotePlayers = {};
+        let lastMsgTime = {};
+
+        let coins = 0;
+        let redeemedCodes = [];
+        let hasCompletedTutorial = false;
+        let fcTutorialStep = 0;
+        let currentTab = 'mundo';
+        let currentRoom = 'plaza';
+        let isEditingIgloo = false;
+        let selectedFurnitureToPlace = null;
+        let animFrameCounter = 0;
+        let isMyIglooPublic = true;
+        let currentIglooHost = 'Invitado';
+
+        const PROMO_CODES = { '1234': 1, 'YEFREE2026': 500, 'YEFREEWORLD': 1000, 'YEFITO': 250 };
+
+        const ROOM_NAMES = {
+            'plaza': 'Plaza Nevada',
+            'discoteca': 'Discoteca (Night Club)',
+            'cafeteria': 'Cafetería',
+            'centro': 'Centro (Town)'
+        };
+
+        let worldCoins = [
+            { x: 150, y: 180 }, { x: 350, y: 220 }, { x: 250, y: 320 }, { x: 450, y: 280 }, { x: 300, y: 150 }
+        ];
+
+        const player = {
+            x: 200, y: 200,
+            targetX: 200, targetY: 200,
+            speed: 4,
+            name: 'Invitado',
+            color: '#ffcc00',
+            hat: 'none',
+            speech: '',
+            speechTimer: 0,
+            isMoving: false,
+            currentFrame: 0,
+            facingLeft: false
+        };
+
+        const activePet = { type: 'Yefito', x: 160, y: 180, aura: '#00f0ff', hat: 'none', currentFrame: 0 };
+
+        const idleSpriteSheet = new Image(); let idleLoaded = false; idleSpriteSheet.onload = () => { idleLoaded = true; }; idleSpriteSheet.src = 'sprite.png';
+        const walkSpriteSheet = new Image(); let walkLoaded = false; walkSpriteSheet.onload = () => { walkLoaded = true; }; walkSpriteSheet.src = 'sprite-walk.png';
+        const yefitoSpriteSheet = new Image(); let yefitoLoaded = true; yefitoSpriteSheet.src = 'yefito-sprite.png';
+        const infonitoSpriteSheet = new Image(); let infonitoLoaded = false; infonitoSpriteSheet.onload = () => { infonitoLoaded = true; }; infonitoSpriteSheet.src = 'infonito-sprite.png';
+
+        const SPRITE_COLS = 4; const SPRITE_ROWS = 3; const TOTAL_FRAMES = 12;
+
+        const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
+        const iglooCanvas = document.getElementById('iglooCanvas'); const iglooCtx = iglooCanvas.getContext('2d');
+        const previewCanvas = document.getElementById('previewCanvas'); const previewCtx = previewCanvas.getContext('2d');
+        const homePreviewCanvas = document.getElementById('homePreviewCanvas'); const homePreviewCtx = homePreviewCanvas.getContext('2d');
+        const infonitoCanvas = document.getElementById('infonitoCanvas'); const infonitoCtx = infonitoCanvas.getContext('2d');
+
+        let introStep = 1;
+
+        function startIntroWithAudio() {
+            const video = document.getElementById('intro-video');
+            const source = document.getElementById('intro-video-source');
+            const audio = document.getElementById('intro-audio');
+            const prompt = document.getElementById('play-sound-prompt');
+            
+            if(prompt) prompt.style.display = 'none';
+            if(video) video.classList.remove('hidden');
+
+            if(video && source && audio) {
+                introStep = 1;
+                source.src = 'yefree-intro1.mp4';
+                video.load();
+                video.play().catch(() => {});
+                audio.play().catch(() => {});
+
+                video.onended = () => {
+                    if (introStep === 1) {
+                        introStep = 2; source.src = 'yefree-intro2.mp4';
+                        video.load(); video.play().catch(() => {});
+                    } else { skipIntroVideo(); }
+                };
+            }
+        }
+
+        function skipIntroVideo(e) {
+            if(e) e.stopPropagation();
+            const overlay = document.getElementById('intro-video-overlay');
+            const video = document.getElementById('intro-video');
+            const audio = document.getElementById('intro-audio');
+            if(video) video.pause();
+            if(audio) { audio.pause(); audio.currentTime = 0; }
+            if(overlay) overlay.classList.add('hidden');
+        }
+
+        function resizeCanvases() {
+            [canvas, iglooCanvas].forEach(c => {
+                if(c && c.parentElement) {
+                    c.width = c.parentElement.clientWidth || window.innerWidth;
+                    c.height = c.parentElement.clientHeight || window.innerHeight;
+                }
+            });
+        }
+        window.addEventListener('resize', resizeCanvases);
+
+        const keys = {};
+        window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if(e.key === 'Enter') sendChatMessage(); });
+        window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+        function setupControls(targetCanvas) {
+            const handleMoveInput = (clientX, clientY) => {
+                const rect = targetCanvas.getBoundingClientRect();
+                const clickX = clientX - rect.left;
+                const clickY = clientY - rect.top;
+
+                if(currentTab === 'casa' && isEditingIgloo && currentIglooHost === player.name) {
+                    if(selectedFurnitureToPlace) {
+                        selectedFurnitureToPlace = null;
+                        isEditingIgloo = false;
+                        document.getElementById('edit-mode-banner').classList.add('hidden');
+                        document.getElementById('btn-edit-igloo').innerText = '🛠️ Editar';
+                    }
+                } else {
+                    player.targetX = clickX;
+                    player.targetY = clickY;
+                }
+            };
+
+            targetCanvas.addEventListener('click', e => handleMoveInput(e.clientX, e.clientY));
+            targetCanvas.addEventListener('touchstart', e => {
+                if(e.touches.length > 0) {
+                    handleMoveInput(e.touches[0].clientX, e.touches[0].clientY);
+                    e.preventDefault();
+                }
+            }, { passive: false });
+        }
+        setupControls(canvas); setupControls(iglooCanvas);
+
+        // --- MULTIJUGADOR MQTT ---
+        const MQTT_TOPIC_POS = 'yefree/global/players';
+        const MQTT_TOPIC_CHAT = 'yefree/global/chat';
+
+        function initMQTTNetwork() {
+            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+                clientId: playerId,
+                clean: true
+            });
+
+            mqttClient.on('connect', () => {
+                document.getElementById('multiplayer-status').className = "w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse";
+                document.getElementById('multiplayer-status-text').innerText = "En línea · Multijugador Global Activo";
+
+                mqttClient.subscribe([MQTT_TOPIC_POS, MQTT_TOPIC_CHAT]);
+            });
+
+            mqttClient.on('message', (topic, payload) => {
+                try {
+                    const data = JSON.parse(payload.toString());
+                    if (data.id === playerId) return;
+
+                    if (topic === MQTT_TOPIC_POS) {
+                        remotePlayers[data.id] = data.player;
+                        lastMsgTime[data.id] = Date.now();
+                    } else if (topic === MQTT_TOPIC_CHAT) {
+                        appendChatMessageUI(data.name, data.text);
+                    }
+                } catch(e){}
+            });
+        }
+
+        let lastBroadcast = 0;
+        function broadcastPlayerState() {
+            const now = Date.now();
+            if (mqttClient && mqttClient.connected && now - lastBroadcast > 80) {
+                lastBroadcast = now;
+                const state = {
+                    id: playerId,
+                    player: {
+                        name: player.name, x: player.x, y: player.y, color: player.color, hat: player.hat,
+                        speech: player.speech, isMoving: player.isMoving, facingLeft: player.facingLeft,
+                        currentTab: currentTab, currentRoom: currentRoom, currentIglooHost: currentIglooHost
+                    }
+                };
+                mqttClient.publish(MQTT_TOPIC_POS, JSON.stringify(state));
+            }
+
+            Object.keys(lastMsgTime).forEach(id => {
+                if (now - lastMsgTime[id] > 5000) {
+                    delete remotePlayers[id];
+                    delete lastMsgTime[id];
+                }
+            });
+        }
+
+        function broadcastChatMessage(text) {
+            if (mqttClient && mqttClient.connected) {
+                const msg = { id: playerId, name: player.name, text: text };
+                mqttClient.publish(MQTT_TOPIC_CHAT, JSON.stringify(msg));
+            }
+        }
+
+        function clearMemoryState(username) {
+            coins = 0; redeemedCodes = []; hasCompletedTutorial = false;
+            player.name = username; player.color = '#ffcc00'; player.hat = 'none';
+            activePet.aura = '#00f0ff'; activePet.hat = 'none'; currentIglooHost = username;
+            updateDisplays();
+            document.getElementById('select-player-hat').value = 'none';
+        }
+
+        function updateDisplays() {
+            document.getElementById('coin-counter').innerText = coins;
+            document.getElementById('home-coin-counter').innerText = coins;
+            document.getElementById('player-avatar-name').innerText = player.name;
+            document.getElementById('home-profile-name').innerText = player.name;
+            document.getElementById('igloo-owner-title').innerText = `🏠 Iglú de ${player.name}`;
+            const nameEl = document.getElementById('current-room-name');
+            if (nameEl) nameEl.innerText = ROOM_NAMES[currentRoom] || 'Plaza Nevada';
+        }
+
+        function handleLogin() {
+            const emailInput = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value.trim();
+            if(!emailInput || !password) { alert('Ingresa usuario y contraseña.'); return; }
+            const cleanKey = emailInput.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const username = emailInput.split('@')[0];
+            currentUserKey = `yefree_account_${cleanKey}`;
+            clearMemoryState(username);
+            loadUserData();
+            document.getElementById('auth-overlay').classList.add('hidden');
+            document.getElementById('main-home-menu').classList.remove('hidden');
+            initMQTTNetwork();
+            checkFirstTimeTutorial();
+        }
+
+        function continueAsGuest() {
+            const guestId = Math.floor(Math.random() * 8000) + 1000;
+            const guestName = `Invitado #${guestId}`;
+            currentUserKey = `yefree_temp_guest_${guestId}`;
+            clearMemoryState(guestName);
+            document.getElementById('auth-overlay').classList.add('hidden');
+            document.getElementById('main-home-menu').classList.remove('hidden');
+            initMQTTNetwork();
+            checkFirstTimeTutorial();
+        }
+
+        function checkFirstTimeTutorial() { if (!hasCompletedTutorial) startInteractiveTutorial(); }
+
+        function speakInfonito(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'es-ES'; utterance.pitch = 0.75; utterance.rate = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function startInteractiveTutorial() {
+            fcTutorialStep = 1;
+            document.getElementById('tutorial-tooltip-box').classList.remove('hidden');
+            applySpotlightStep();
+        }
+
+        function applySpotlightStep() {
+            ['nav-play-btn', 'nav-customizer-btn', 'customizer-close-btn', 'nav-codes-btn', 'nav-coins-box'].forEach(id => {
+                const el = document.getElementById(id); if(el) el.classList.remove('tutorial-pulse-target');
+            });
+
+            const titleEl = document.getElementById('fc-tut-title');
+            const descEl = document.getElementById('fc-tut-desc');
+            let targetId = null, spokenText = "";
+
+            if(fcTutorialStep === 1) {
+                titleEl.innerText = "¡Ay, mis rodillas y la espalda! 💀";
+                spokenText = "¡Bienvenido a YEFREE! Soy Infonito. Llevo 12 horas seguidas cargando cajas por el sueldo mínimo mientras mi jefe toma café helado... ¡Carlos fingió demencia otra vez y me dejó solo! Toca el botón Jugar para largarnos de este turno eterno.";
+                typeText(descEl, spokenText); targetId = 'nav-play-btn';
+            } else if(fcTutorialStep === 2) {
+                titleEl.innerText = "Explotación pura y dura 🛠️";
+                spokenText = "Aquí nadie descansa y el supervisor nos descuenta hasta el agua del bote. ¡Toca Personalizar Avatar para cambiarte de ropa antes de que nos hagan limpiar el suelo con un cepillo de dientes!";
+                typeText(descEl, spokenText); targetId = 'nav-customizer-btn';
+            } else if(fcTutorialStep === 3) {
+                titleEl.innerText = "Sin contrato ni salida 🚪";
+                spokenText = "Ojalá yo pudiera tocar una X gigante para renunciar a este trabajo miserable. Toca la X arriba para cerrar el vestidor antes de que venga Carlos a pedirme que le cubra las horas.";
+                typeText(descEl, spokenText); targetId = 'customizer-close-btn';
+            } else if(fcTutorialStep === 4) {
+                titleEl.innerText = "Salario emocional = $0 🪙";
+                spokenText = "Canjea códigos promocionales como 1234 para conseguir monedas. ¡Eso es más de lo que me pagan a mí en todo un mes de propinas miserables en la bodega! Toca aquí.";
+                typeText(descEl, spokenText); targetId = 'nav-codes-btn';
+            } else if(fcTutorialStep === 5) {
+                titleEl.innerText = "Tus Monedas de Oro 🪙";
+                spokenText = "Cuida bien tus ahorros porque las empresas no cuidan a sus empleados. ¡Listo, ya sabes cómo jugar! Ahora ve a divertirte en el multijugador, prueba los minijuegos 🎮 para ganar más monedas... y yo sigo levantando pallets.";
+                typeText(descEl, spokenText); targetId = 'nav-coins-box';
+            } else { skipTutorial(); return; }
+
+            document.getElementById('fc-tut-dots').innerHTML = [1,2,3,4,5].map(i => `<span class="w-2.5 h-2.5 rounded-full border-2 border-[#002244] ${i <= fcTutorialStep ? 'bg-[#ffcc00]' : 'bg-[#003366]'}"></span>`).join('');
+            speakInfonito(spokenText);
+            const targetEl = document.getElementById(targetId);
+            if(targetEl) { targetEl.classList.add('tutorial-pulse-target'); positionTutorialArrow(targetEl); }
+        }
+
+        function positionTutorialArrow(el) {
+            const arrow = document.getElementById('tutorial-arrow');
+            if(!el) { arrow.classList.add('hidden'); return; }
+            const rect = el.getBoundingClientRect();
+            arrow.style.left = `${rect.left + rect.width / 2 - 16}px`;
+            arrow.style.top = `${rect.top - 42}px`;
+            arrow.classList.remove('hidden');
+        }
+
+        document.addEventListener('click', (e) => {
+            if(fcTutorialStep > 0) {
+                if(fcTutorialStep === 1 && e.target.closest('#nav-play-btn')) { fcTutorialStep = 2; setTimeout(applySpotlightStep, 50); }
+                else if(fcTutorialStep === 2 && e.target.closest('#nav-customizer-btn')) { fcTutorialStep = 3; setTimeout(applySpotlightStep, 100); }
+                else if(fcTutorialStep === 3 && e.target.closest('#customizer-close-btn')) { fcTutorialStep = 4; setTimeout(applySpotlightStep, 50); }
+                else if(fcTutorialStep === 4 && e.target.closest('#nav-codes-btn')) { fcTutorialStep = 5; setTimeout(applySpotlightStep, 50); }
+                else if(fcTutorialStep === 5 && e.target.closest('#nav-coins-box')) { skipTutorial(); }
+            }
+        });
+
+        function skipTutorial() {
+            fcTutorialStep = 0; hasCompletedTutorial = true; clearInterval(infTyper); infTalking = false;
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            document.getElementById('tutorial-arrow').classList.add('hidden');
+            document.getElementById('tutorial-tooltip-box').classList.add('hidden');
+            ['nav-play-btn', 'nav-customizer-btn', 'customizer-close-btn', 'nav-codes-btn', 'nav-coins-box'].forEach(id => {
+                const el = document.getElementById(id); if(el) el.classList.remove('tutorial-pulse-target');
+            });
+            saveUserData();
+        }
+
+        function startGameFromMenu() {
+            if(fcTutorialStep === 1) { fcTutorialStep = 2; applySpotlightStep(); return; }
+            document.getElementById('main-home-menu').classList.add('hidden');
+            if(fcTutorialStep > 0) skipTutorial();
+            switchTab('mundo');
+        }
+
+        function returnToHomeMenu() { document.getElementById('main-home-menu').classList.remove('hidden'); }
+
+        function handleLogout() {
+            saveUserData(); currentUserKey = null; clearMemoryState('Invitado');
+            document.getElementById('main-home-menu').classList.add('hidden');
+            document.getElementById('auth-overlay').classList.remove('hidden');
+        }
+
+        function saveUserData() {
+            if(!currentUserKey) return;
+            const dataToSave = {
+                name: player.name, coins: coins, redeemedCodes: redeemedCodes, hasCompletedTutorial: hasCompletedTutorial,
+                color: player.color, hat: player.hat, petAura: activePet.aura, petHat: activePet.hat
+            };
+            localStorage.setItem(currentUserKey, JSON.stringify(dataToSave));
+        }
+
+        function loadUserData() {
+            if(!currentUserKey) return;
+            const saved = localStorage.getItem(currentUserKey);
+            if(saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    player.name = data.name || player.name;
+                    coins = data.coins !== undefined ? data.coins : 0;
+                    redeemedCodes = data.redeemedCodes || [];
+                    hasCompletedTutorial = data.hasCompletedTutorial || false;
+                    player.color = data.color || '#ffcc00'; player.hat = data.hat || 'none';
+                    activePet.aura = data.petAura || '#00f0ff'; activePet.hat = data.petHat || 'none';
+                    updateDisplays();
+                    document.getElementById('select-player-hat').value = player.hat;
+                    currentIglooHost = player.name;
+                } catch(e) {}
+            }
+        }
+
+        function openCodeModal() { document.getElementById('input-promo-code').value = ''; document.getElementById('code-feedback').classList.add('hidden'); document.getElementById('code-modal').classList.remove('hidden'); if(fcTutorialStep === 4) { fcTutorialStep = 5; applySpotlightStep(); } }
+        function closeCodeModal() { document.getElementById('code-modal').classList.add('hidden'); }
+
+        function redeemCode() {
+            const codeInput = document.getElementById('input-promo-code').value.trim().toUpperCase();
+            const feedback = document.getElementById('code-feedback');
+            feedback.classList.remove('hidden');
+            if(!codeInput) { feedback.className = "text-xs font-bold text-red-400"; feedback.innerText = "Escribe un código."; return; }
+            if(redeemedCodes.includes(codeInput)) { feedback.className = "text-xs font-bold text-yellow-300"; feedback.innerText = "¡Ya canjeaste este código!"; return; }
+            if(PROMO_CODES[codeInput] !== undefined) {
+                coins += PROMO_CODES[codeInput]; redeemedCodes.push(codeInput); updateDisplays(); saveUserData();
+                feedback.className = "text-xs font-bold text-green-400"; feedback.innerText = `¡Éxito! +${PROMO_CODES[codeInput]} 🪙`;
+            } else { feedback.className = "text-xs font-bold text-red-400"; feedback.innerText = "Código inválido."; }
+        }
+
+        function gameLoop() {
+            animFrameCounter++;
+            updatePlayerMovement();
+            broadcastPlayerState();
+
+            if(currentTab === 'mundo') renderWorld();
+            else if(currentTab === 'casa') renderIgloo();
+
+            renderPreview(); renderHomePreview(); renderInfonitoPreview();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ---- Infonito: personaje de respaldo (se usa si falta infonito-sprite.png) ----
+        var infTalking = false, infTyper = null;
+        function typeText(el, text) {
+            clearInterval(infTyper); el.innerText = ''; let i = 0; infTalking = true;
+            infTyper = setInterval(() => { i += 2; el.innerText = text.slice(0, i); if (i >= text.length) { clearInterval(infTyper); infTalking = false; } }, 22);
+        }
+        function drawInfonitoFallback(c, t) {
+            const k = c.canvas.width / 80, b = Math.sin(t * .1) * 1.6;
+            c.save(); c.scale(k, k); c.lineJoin = 'round'; c.lineWidth = 2.4; c.strokeStyle = '#14305c';
+            const P = (p, f) => { c.beginPath(); c.moveTo(p[0], p[1]); for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]); c.closePath(); c.fillStyle = f; c.fill(); c.stroke(); };
+            const E = (x, y, rx, ry, f) => { c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, 7); c.fillStyle = f; c.fill(); c.stroke(); };
+            E(40, 54 + b, 18, 19, '#1f6fd1');
+            P([26, 47 + b, 54, 47 + b, 52, 70 + b, 28, 70 + b], '#ff8c1a'); c.fillStyle = '#fff3a0'; c.fillRect(27.5, 56 + b, 25, 3);
+            E(40, 31 + b, 16, 15, '#1f6fd1'); E(40, 34 + b, 12.5, 10, '#fff');
+            [-6, 6].forEach(d => {
+                c.lineWidth = 1.4; c.beginPath(); c.ellipse(40 + d, 31.5 + b, 4, 3.4, 0, 0, Math.PI); c.closePath(); c.fillStyle = '#eaf2ff'; c.fill(); c.stroke();
+                c.fillStyle = '#14305c'; c.beginPath(); c.arc(40 + d, 32.6 + b, 1.5, 0, 7); c.fill();
+                c.strokeStyle = '#8a6ab0'; c.lineWidth = 1.4; c.beginPath(); c.arc(40 + d, 33.4 + b, 4.4, .3, Math.PI - .3); c.stroke(); c.strokeStyle = '#14305c'; c.lineWidth = 2.4;
+            });
+            P([36, 37 + b, 44, 37 + b, 40, 42 + b], '#ffb800');
+            if (infTalking && t % 8 < 4) { c.beginPath(); c.ellipse(40, 45.5 + b, 3, 2.2, 0, 0, 7); c.fillStyle = '#7a1f1f'; c.fill(); c.stroke(); }
+            c.beginPath(); c.arc(40, 24 + b, 15, Math.PI, 0); c.closePath(); c.fillStyle = '#ffd400'; c.fill(); c.stroke();
+            P([23, 24 + b, 57, 24 + b, 55, 28 + b, 25, 28 + b], '#ffd400'); c.beginPath(); c.moveTo(40, 9.5 + b); c.lineTo(40, 24 + b); c.stroke();
+            E(57, 22 + ((t * .35) % 12) + b, 2.2, 3, '#8fd8ff');
+            P([19, 62 + b * .6, 61, 62 + b * .6, 61, 79, 19, 79], '#c58a52'); c.fillStyle = '#e0b07a'; c.fillRect(37, 62 + b * .6, 6, 17); c.strokeRect(37, 62 + b * .6, 6, 17);
+            c.restore();
+        }
+
+        function renderInfonitoPreview() {
+            infonitoCtx.clearRect(0, 0, infonitoCanvas.width, infonitoCanvas.height);
+            if(infonitoLoaded && infonitoSpriteSheet.naturalWidth > 0) {
+                const fw = infonitoSpriteSheet.width / SPRITE_COLS; const fh = infonitoSpriteSheet.height / SPRITE_ROWS;
+                const frameIndex = Math.floor(animFrameCounter / 8) % TOTAL_FRAMES;
+                infonitoCtx.drawImage(infonitoSpriteSheet, (frameIndex % SPRITE_COLS) * fw, Math.floor(frameIndex / SPRITE_COLS) * fh, fw, fh, 0, 0, infonitoCanvas.width, infonitoCanvas.height);
+            } else { drawInfonitoFallback(infonitoCtx, animFrameCounter); }
+        }
+
+        function updatePlayerMovement() {
+            let dx = 0, dy = 0;
+            if(keys['w'] || keys['arrowup']) dy -= 1;
+            if(keys['s'] || keys['arrowdown']) dy += 1;
+            if(keys['a'] || keys['arrowleft']) { dx -= 1; player.facingLeft = true; }
+            if(keys['d'] || keys['arrowright']) { dx += 1; player.facingLeft = false; }
+
+            player.isMoving = (dx !== 0 || dy !== 0);
+            if(player.isMoving) {
+                const len = Math.sqrt(dx*dx + dy*dy);
+                player.x += (dx/len) * player.speed; player.y += (dy/len) * player.speed;
+                player.targetX = player.x; player.targetY = player.y;
+            } else {
+                const distX = player.targetX - player.x; const distY = player.targetY - player.y;
+                if(Math.hypot(distX, distY) > 2) {
+                    if(distX < -2) player.facingLeft = true; if(distX > 2) player.facingLeft = false;
+                    player.x += (distX / Math.hypot(distX, distY)) * player.speed;
+                    player.y += (distY / Math.hypot(distX, distY)) * player.speed;
+                    player.isMoving = true;
+                }
+            }
+
+            const activeC = currentTab === 'casa' ? iglooCanvas : canvas;
+            player.x = Math.max(30, Math.min(activeC.width - 30, player.x));
+            player.y = Math.max(currentTab === 'casa' ? 80 : Math.round(activeC.height * 0.3), Math.min(activeC.height - 30, player.y));
+
+            player.currentFrame = Math.floor(animFrameCounter / 5) % TOTAL_FRAMES;
+            activePet.currentFrame = Math.floor(animFrameCounter / 4) % TOTAL_FRAMES;
+
+            const floatOffset = Math.sin(animFrameCounter * 0.08) * 6;
+            activePet.x += ((player.x + (player.facingLeft ? 35 : -35)) - activePet.x) * 0.1;
+            activePet.y += ((player.y - 20 + floatOffset) - activePet.y) * 0.1;
+
+            if(currentTab === 'mundo' && currentRoom === 'plaza') {
+                worldCoins.forEach((coin) => {
+                    if(Math.hypot(player.x - coin.x, player.y - coin.y) < 30) {
+                        coins += 10; updateDisplays(); saveUserData();
+                        coin.x = Math.random() * (canvas.width - 80) + 40;
+                        coin.y = Math.random() * (canvas.height * 0.5) + (canvas.height * 0.3);
+                    }
+                });
+            }
+        }
+
+        // ===================== SALAS YEFREE v2 =====================
+        const _bg = {};
+        function cachedBG(k, w, h, fn) { let o = _bg[k]; if (!o || o.width !== w || o.height !== h) { o = document.createElement('canvas'); o.width = w; o.height = h; fn(o.getContext('2d')); _bg[k] = o; } return o; }
+        let OUT = '#16335e';
+        const _o = (c, f, s, lw) => { c.lineJoin = 'round'; if (s) { c.strokeStyle = s; c.lineWidth = lw || 3; c.stroke(); } else if (typeof f === 'string' && !/^(rgba|hsla)/.test(f)) { c.strokeStyle = OUT; c.lineWidth = 3; c.stroke(); } };
+        const rnd = s => () => (s = s * 16807 % 2147483647) / 2147483647;
+        const gr = (c, x0, y0, x1, y1, st) => { const g = c.createLinearGradient(x0, y0, x1, y1); st.forEach((s, i) => g.addColorStop(i / (st.length - 1), s)); return g; };
+        const rg = (c, x, y, r, a, b) => { const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, a); g.addColorStop(1, b); return g; };
+        const box = (c, x, y, w, h, f, s, lw) => { c.beginPath(); c.roundRect(x, y, w, h, 3); if (f) { c.fillStyle = f; c.fill(); } _o(c, f, s, lw); };
+        const dot = (c, x, y, r, f, s, lw) => { c.beginPath(); c.arc(x, y, r, 0, 7); if (f) { c.fillStyle = f; c.fill(); } _o(c, f, s, lw); };
+        const ell = (c, x, y, rx, ry, f, s, lw) => { c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, 7); if (f) { c.fillStyle = f; c.fill(); } _o(c, f, s, lw); };
+        const poly = (c, p, f) => { c.beginPath(); c.moveTo(p[0], p[1]); for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]); c.closePath(); c.fillStyle = f; c.fill(); _o(c, f); };
+        function tiles(c, w, h, FT, cols, fn) { const tw = w / cols; let y = FT, r = 0; while (y < h) { const th = 14 + r * 4.5; for (let i = 0; i < cols; i++) fn(i, r, i * tw, y, tw, th); y += th; r++; } }
+        function neon(c, txt, x, y, size, col, a) { c.save(); c.globalAlpha = a == null ? 1 : a; c.font = `800 ${size}px "Baloo 2",sans-serif`; c.textAlign = 'center'; c.shadowColor = col; c.shadowBlur = 16; c.strokeStyle = col; c.lineWidth = 4; c.strokeText(txt, x, y); c.fillStyle = '#fff'; c.fillText(txt, x, y); c.restore(); }
+        function sign(c, txt, x, y, size, col, bg) { c.save(); c.font = `800 ${size}px "Baloo 2",sans-serif`; c.textAlign = 'center'; c.fillStyle = bg || 'rgba(0,0,0,.55)'; const tw = c.measureText(txt).width + 16; c.fillRect(x - tw / 2, y - size, tw, size * 1.35); c.fillStyle = col; c.fillText(txt, x, y); c.restore(); }
+        function snow(c, w, h, t, n) { c.fillStyle = 'rgba(255,255,255,.85)'; for (let i = 0; i < n; i++) { const sp = .4 + (i % 5) * .25; dot(c, ((i * 97) % w) + Math.sin(t * .02 + i) * 14, (t * sp + i * 53) % h, 1.2 + (i % 3) * .6, 'rgba(255,255,255,.85)'); } }
+        function pine(c, x, y, s) { box(c, x - 3 * s, y - 6 * s, 6 * s, 8 * s, '#5a3a1e'); [['#1f6b4a', 0], ['#2a8a5e', -16], ['#35a070', -30]].forEach(([col, dy], i) => { const wd = (28 - i * 6) * s; poly(c, [x - wd, y - 6 * s + dy * s, x + wd, y - 6 * s + dy * s, x, y - 34 * s + dy * s], col); poly(c, [x - wd * .45, y - 22 * s + dy * s, x + wd * .45, y - 22 * s + dy * s, x, y - 34 * s + dy * s], '#fff'); }); }
+        function lamp(c, x, y, hgt, glow) { box(c, x - 3, y, 6, hgt, '#2d3a50'); box(c, x - 9, y + hgt - 4, 18, 6, '#2d3a50'); dot(c, x, y, 9, glow ? '#fff1a8' : '#e8eef8', '#2d3a50', 3); }
+
+        const SCENES = {
+            // ---------------- PLAZA NEVADA ----------------
+            plaza: {
+                s(c, w, h, FT) {
+                    box(c, 0, 0, w, h, gr(c, 0, 0, 0, FT, ['#3b86ff', '#9bd6ff', '#eaf7ff']));
+                    const r = rnd(7);
+                    for (let i = 0; i < 4; i++) { const cx = r() * w, cy = 12 + r() * FT * .35; [-1, 0, 1].forEach(k => ell(c, cx + k * 22, cy + Math.abs(k) * 3, 26, 10, 'rgba(255,255,255,.75)')); }
+                    [['#7fa8d6', 56], ['#b4d2ee', 36]].forEach(([col, amp]) => { const p = [0, FT]; for (let x = 0; x <= w + 80; x += 80 + r() * 50) { p.push(x, FT - amp * (.5 + r() * .5)); p.push(x + 40, FT - 6 - r() * 10); } p.push(w + 90, FT); poly(c, p, col); });
+                    box(c, 0, FT, w, h - FT, gr(c, 0, FT, 0, h, ['#f6fcff', '#cfe8fa']));
+                    for (let x = 12; x < w; x += 32 + r() * 26) pine(c, x, FT + 8, .9 + r() * .3);
+                    for (let i = 0; i < 7; i++) ell(c, r() * w, FT + 30 + r() * (h - FT - 30), 50 + r() * 60, 8 + r() * 8, 'rgba(255,255,255,.55)');
+                    const cx = w / 2, cy = h * .6, R = Math.min(w * .3, 210);
+                    ell(c, cx, cy + 10, R * 1.5, R * .5, '#e3f2fc', '#9cc7ea', 3);
+                    ell(c, cx, cy + 14, 72, 27, '#b9d9ef', '#5f95bf', 3); ell(c, cx, cy + 8, 62, 21, '#76cdfb', '#3f9bd6', 2);
+                    box(c, cx - 8, cy - 32, 16, 40, '#d6eaf8', '#5f95bf'); ell(c, cx, cy - 32, 27, 9, '#d6eaf8', '#5f95bf'); ell(c, cx, cy - 34, 20, 6, '#8adcff');
+                    [w * .09, w * .91].forEach(x => { const g = rg(c, x, h * .4, 60, 'rgba(255,241,168,.45)', 'rgba(255,241,168,0)'); box(c, x - 60, h * .4 - 60, 120, 120, g); lamp(c, x, h * .4, h * .22, true); });
+                },
+                d(c, w, h, FT, t) {
+                    const cx = w / 2, cy = h * .6;
+                    c.lineCap = 'round'; c.strokeStyle = 'rgba(210,245,255,.9)'; c.lineWidth = 3;
+                    [-1, 0, 1].forEach(k => { const ph = (t * .05 + k) % 1; c.beginPath(); c.moveTo(cx, cy - 38); c.quadraticCurveTo(cx + k * 26, cy - 70 - 6 * Math.sin(t * .1 + k), cx + k * 44, cy + 6); c.stroke(); });
+                    for (let i = 0; i < 2; i++) { const p = ((t + i * 30) % 60) / 60; ell(c, cx, cy + 8, 20 + p * 40, 6 + p * 14, null, `rgba(255,255,255,${.7 * (1 - p)})`, 2); }
+                    worldCoins.forEach(coin => { c.save(); c.shadowColor = '#ffcc00'; c.shadowBlur = 10; dot(c, coin.x, coin.y, 12, '#ffcc00', '#663300', 2.5); c.restore(); c.fillStyle = '#663300'; c.font = 'bold 12px "Baloo 2",sans-serif'; c.textAlign = 'center'; c.fillText('Y', coin.x, coin.y + 4); });
+                    snow(c, w, h, t, 45);
+                }
+            },
+            // ---------------- DISCOTECA ----------------
+            discoteca: {
+                s(c, w, h, FT) {
+                    box(c, 0, 0, w, h, '#0b0418'); box(c, 0, 0, w, FT, gr(c, 0, 0, 0, FT, ['#1a0838', '#2f1060']));
+                    c.strokeStyle = 'rgba(255,255,255,.05)'; c.lineWidth = 1; for (let x = 0; x < w; x += 36) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, FT); c.stroke(); }
+                    c.save(); c.shadowBlur = 14; c.shadowColor = '#ff2fb3'; box(c, 0, FT - 3, w, 5, '#ff2fb3'); c.shadowColor = '#00f0ff'; [6, w - 10].forEach(x => box(c, x, 0, 4, FT, '#00f0ff')); c.restore();
+                },
+                d(c, w, h, FT, t) {
+                    const sx = w / 2, sw = Math.min(w * .42, 340);
+                    const n = Math.max(8, Math.floor(w / 16)), L = musLevels(n);
+                    for (let i = 0; i < n; i++) { const v = L ? Math.min(1, L[i] * 1.15) : (Math.sin(t * .13 + i * .7) + Math.sin(t * .07 + i * 1.9) + 2) / 4, bh = v * FT * .5; c.fillStyle = `hsla(${(i * 9 + t * 2) % 360},100%,60%,.5)`; c.fillRect(i * (w / n) + 1, FT - 6 - bh, w / n - 3, bh); }
+                    c.drawImage(cachedBG('disco2', w, h, b => {
+                        const spH = Math.max(60, FT - 52);
+                        [-1, 1].forEach(k => { const x = sx + k * (sw / 2 + 30) - 22; box(b, x, FT - spH, 44, spH, '#15151f', '#ff2fb3', 2); dot(b, x + 22, FT - spH * .7, 13, '#2a2a3a', '#667', 2); dot(b, x + 22, FT - spH * .7, 5, '#445'); dot(b, x + 22, FT - spH * .28, 9, '#2a2a3a', '#667', 2); dot(b, x + 22, FT - spH * .28, 3, '#445'); });
+                        box(b, sx - sw / 2, FT - 14, sw, 14, gr(b, 0, FT - 14, 0, FT, ['#3a3a55', '#1c1c2e']), '#00f0ff', 2);
+                        box(b, sx - sw * .32, FT - 52, sw * .64, 38, gr(b, 0, FT - 52, 0, FT - 14, ['#2b2b44', '#171726']), '#ff2fb3', 2);
+                        [-1, 1].forEach(k => { dot(b, sx + k * sw * .17, FT - 36, 12, '#111', '#99a', 2); dot(b, sx + k * sw * .17, FT - 36, 3, '#ff2fb3'); });
+                        box(b, sx - 7, FT - 46, 14, 20, '#222', '#00f0ff', 1);
+                    }), 0, 0);
+                    tiles(c, w, h, FT, 12, (i, r, x, y, tw, th) => { const on = ((i * 5 + r * 3 + Math.floor(t / 12)) % 4) !== 0; c.fillStyle = on ? `hsla(${(t * 2 + i * 30 + r * 22) % 360},100%,${46 + 8 * Math.sin(t * .1 + i + r)}%,.38)` : 'rgba(10,4,25,.85)'; c.fillRect(x + 1, y + 1, tw - 2, th - 2); });
+                    c.save(); c.globalCompositeOperation = 'lighter';
+                    ['255,47,179', '0,240,255', '255,204,0', '90,255,120'].forEach((col, k) => {
+                        const ox = w * (.14 + k * .24), a = Math.sin(t * .03 + k * 1.7) * .55, tx = ox + Math.tan(a) * h;
+                        const g = c.createLinearGradient(ox, 0, tx, h); g.addColorStop(0, `rgba(${col},.4)`); g.addColorStop(1, `rgba(${col},0)`);
+                        c.fillStyle = g; poly(c, [ox - 4, 0, ox + 4, 0, tx + 55, h, tx - 55, h], g); dot(c, ox, 3, 7, `rgb(${col})`);
+                    });
+                    c.restore();
+                    const bx = sx, by = 44, ph = t * .04;
+                    c.strokeStyle = '#99a'; c.lineWidth = 2; c.beginPath(); c.moveTo(bx, 0); c.lineTo(bx, by - 22); c.stroke();
+                    dot(c, bx, by, 22, rg(c, bx - 7, by - 7, 30, '#ffffff', '#7a7f99'), '#556', 2);
+                    c.strokeStyle = 'rgba(40,40,70,.35)'; c.lineWidth = 1;
+                    for (let j = 0; j < 5; j++) { ell(c, bx, by, 22 * Math.abs(Math.cos(ph + j * .63)), 22, null, 'rgba(40,40,70,.35)', 1); }
+                    for (let j = -1; j <= 1; j++) { c.beginPath(); c.moveTo(bx - 21 * Math.cos(j * .5), by + j * 11); c.lineTo(bx + 21 * Math.cos(j * .5), by + j * 11); c.stroke(); }
+                    for (let i = 0; i < 18; i++) { const a = t * .02 + i * .35, px = sx + Math.cos(a) * w * (.12 + .3 * ((i * 7) % 5) / 5), py = FT + (h - FT) * (.5 + .45 * Math.sin(a * 1.3 + i)); c.fillStyle = `rgba(255,255,255,${.35 + .4 * Math.sin(t * .2 + i)})`; c.fillRect(px, py, 3, 3); }
+                    const fs = Math.min(22, w / 16), fl = (t % 120 < 5) ? .35 : 1;
+                    neon(c, 'NIGHT', sx - sw / 2 - 30, 30, fs, '#ff2fb3', fl); neon(c, 'CLUB', sx + sw / 2 + 30, 30, fs, '#00f0ff');
+                    c.font = '800 11px "Baloo 2",sans-serif'; c.textAlign = 'center'; c.fillStyle = '#ffcc00'; c.fillText('DJ YEFREE', sx, FT - 3);
+                    c.fillStyle = rg(c, w / 2, h * .55, Math.max(w, h) * .75, 'rgba(0,0,0,0)', 'rgba(0,0,0,.6)'); c.fillRect(0, 0, w, h);
+                }
+            },
+            // ---------------- CAFETERIA ----------------
+            cafeteria: {
+                s(c, w, h, FT) {
+                    box(c, 0, 0, w, FT, gr(c, 0, 0, 0, FT, ['#8a5530', '#6a3d20']));
+                    c.fillStyle = 'rgba(255,225,170,.09)'; for (let x = 0; x < w; x += 28) c.fillRect(x, 0, 14, FT);
+                    box(c, 0, FT * .62, w, FT * .38, '#4a2a14'); box(c, 0, FT * .62, w, 4, '#c58a52');
+                    tiles(c, w, h, FT, 14, (i, r, x, y, tw, th) => { c.fillStyle = (i + r) % 2 ? '#efe0c2' : '#cfa87c'; c.fillRect(x, y, tw + 1, th + 1); });
+                    const ww = Math.min(100, w * .2), wx = w * .04, wy = FT * .16, wh = FT * .46;
+                    box(c, wx - 5, wy - 5, ww + 10, wh + 10, '#f1e2c4', '#3e2412', 3); box(c, wx, wy, ww, wh, gr(c, 0, wy, 0, wy + wh, ['#8fd0ff', '#e8f6ff']));
+                    c.save(); c.beginPath(); c.rect(wx, wy, ww, wh); c.clip(); ell(c, wx + ww * .3, wy + wh, ww * .5, wh * .25, '#fff'); ell(c, wx + ww * .8, wy + wh, ww * .4, wh * .2, '#fff'); c.restore();
+                    box(c, wx + ww / 2 - 2, wy, 4, wh, '#f1e2c4'); box(c, wx, wy + wh / 2 - 2, ww, 4, '#f1e2c4');
+                    poly(c, [wx - 8, wy - 8, wx + 14, wy - 8, wx + 4, wy + wh + 6, wx - 8, wy + wh + 6], '#b3261e'); poly(c, [wx + ww + 8, wy - 8, wx + ww - 14, wy - 8, wx + ww - 4, wy + wh + 6, wx + ww + 8, wy + wh + 6], '#b3261e');
+                    const sx = w * .84, sw2 = Math.min(64, w * .13);
+                    box(c, sx, FT * .28, sw2, 5, '#3e2412'); box(c, sx, FT * .5, sw2, 5, '#3e2412');
+                    ['#e8554e', '#4aa3df', '#f3c53a', '#7bc67e'].forEach((col, i) => { box(c, sx + 4 + i * (sw2 / 4.2), FT * .28 - 14, 9, 14, col, '#2a1608', 1); box(c, sx + 4 + i * (sw2 / 4.2), FT * .5 - 14, 9, 14, col, '#2a1608', 1); });
+                    const bw = Math.min(150, w * .3); box(c, w / 2 - bw / 2, 8, bw, FT * .5, '#1f3a2c', '#8a5a2c', 4);
+                    [w * .28, w * .72].forEach(x => { c.strokeStyle = '#2a1608'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, FT * .4); c.stroke(); box(c, x - 4, FT * .4 - 4, 8, 6, '#2a1608'); poly(c, [x - 16, FT * .4 + 14, x + 16, FT * .4 + 14, x + 8, FT * .4 - 2, x - 8, FT * .4 - 2], '#d9a441'); box(c, x - 80, FT * .4 - 60, 160, 120, rg(c, x, FT * .4 + 12, 70, 'rgba(255,214,120,.38)', 'rgba(255,214,120,0)')); });
+                    const x0 = w * .2, cw = w * .6, ct = FT - 4;
+                    box(c, x0, ct + 10, cw, 34, gr(c, 0, ct + 10, 0, ct + 44, ['#7a4624', '#58301a']), '#2e180b', 2);
+                    for (let x = x0 + 10; x < x0 + cw - 20; x += 36) box(c, x, ct + 16, 28, 22, null, '#a5693a', 2);
+                    box(c, x0 - 6, ct, cw + 12, 12, '#d79c63', '#7a4624', 2);
+                    const mx = x0 + cw * .1; box(c, mx, ct - 32, 42, 32, gr(c, mx, 0, mx + 42, 0, ['#d9dde3', '#8a919c']), '#444c58', 2); dot(c, mx + 21, ct - 20, 6, '#fff', '#444c58', 2); box(c, mx + 12, ct - 8, 18, 8, '#3b2a22');
+                    const kx = x0 + cw * .42; ell(c, kx, ct, 22, 5, '#e9e9ee', '#999'); c.beginPath(); c.arc(kx, ct - 2, 20, Math.PI, 0); c.fillStyle = 'rgba(190,230,255,.45)'; c.fill(); c.strokeStyle = '#7fb2d4'; c.lineWidth = 2; c.stroke(); box(c, kx - 12, ct - 14, 24, 12, '#f2b8c6', '#a8566a', 1); box(c, kx - 12, ct - 14, 24, 4, '#fff6');
+                    for (let i = 0; i < 3; i++) { const cx = x0 + cw * (.65 + i * .09); box(c, cx, ct - 12, 12, 12, '#fff', '#888', 1); box(c, cx + 12, ct - 9, 3, 6, null, '#888', 1); }
+                    [w * .1, w * .9].forEach(x => { const y = h * .82; ell(c, x, y + 14, 34, 11, 'rgba(0,0,0,.25)'); box(c, x - 4, y - 4, 8, 20, '#4a2a14'); ell(c, x, y - 6, 32, 11, '#d79c63', '#7a4624', 3); ell(c, x, y - 8, 14, 5, '#fff', '#bbb', 1); });
+                },
+                d(c, w, h, FT, t) {
+                    const x0 = w * .2, cw = w * .6, ct = FT - 4;
+                    [x0 + cw * .1 + 21, x0 + cw * .65 + 6].forEach((sx, k) => { for (let i = 0; i < 3; i++) { const p = ((t * .02 + i * .33 + k * .2) % 1); c.strokeStyle = `rgba(255,255,255,${.5 * (1 - p)})`; c.lineWidth = 3; c.beginPath(); c.moveTo(sx + Math.sin(p * 9 + i) * 4, ct - 36 - p * 22 + (k ? 24 : 0)); c.lineTo(sx + Math.sin(p * 9 + i + 1) * 5, ct - 46 - p * 22 + (k ? 24 : 0)); c.stroke(); } });
+                    const bw = Math.min(150, w * .3); c.textAlign = 'center'; c.fillStyle = '#fff6d6'; c.font = `800 ${Math.max(11, Math.min(15, bw / 9))}px "Baloo 2",sans-serif`; c.fillText('☕ CAFÉ YEFREE', w / 2, 8 + FT * .2);
+                    c.strokeStyle = 'rgba(255,246,214,.6)'; c.lineWidth = 2; for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(w / 2 - bw * .38, 8 + FT * .3 + i * 8); c.lineTo(w / 2 + bw * .38 - i * 14, 8 + FT * .3 + i * 8); c.stroke(); }
+                }
+            },
+            // ---------------- CENTRO ----------------
+            centro: {
+                s(c, w, h, FT) {
+                    box(c, 0, 0, w, h, gr(c, 0, 0, 0, FT * 1.1, ['#0a1a3f', '#27407f', '#5d79b8']));
+                    const r = rnd(11); for (let i = 0; i < 40; i++) dot(c, r() * w, r() * FT * .6, .6 + r() * 1.1, 'rgba(255,255,255,.85)');
+                    dot(c, w * .5, 22, 13, '#fffbe0'); dot(c, w * .5 + 5, 19, 12, '#12275c');
+                    for (let x = 0; x < w; x += 24 + r() * 20) { const bh = 20 + r() * 40; box(c, x, FT - bh, 22, bh, '#0f2252'); }
+                    box(c, 0, FT, w, h - FT, gr(c, 0, FT, 0, h, ['#a9bfd6', '#e6f2fb', '#cfe3f3'])); box(c, 0, FT, w, 16, '#8aa1ba'); box(c, 0, FT + 14, w, 3, '#6d86a1');
+                    for (let i = 0; i < 6; i++) ell(c, r() * w, FT + 40 + r() * (h - FT - 40), 40 + r() * 50, 7 + r() * 6, 'rgba(255,255,255,.6)');
+                    const sw = Math.min(w * .38, 280), T = FT * .16, sh = FT + 6 - T;
+                    [[w * .03, '#5b3a8c', '#e04aa8', 'M'], [w - w * .03 - sw, '#8c3a2a', '#e8453a', 'P']].forEach(([x, wall, aw, kind]) => {
+                        box(c, x, T, sw, sh, wall, '#1a1030', 3); box(c, x - 4, T - 6, sw + 8, 8, '#2a1a4a');
+                        for (let i = 0; i < 8; i++) poly(c, [x + i * sw / 8, T + 22, x + (i + 1) * sw / 8, T + 22, x + (i + .9) * sw / 8, T + 40, x + (i + .1) * sw / 8, T + 40], i % 2 ? '#fff' : aw);
+                        const wx = x + 10, wy = T + 46, ww = sw * .5, wh = sh - 52; box(c, wx, wy, ww, wh, gr(c, 0, wy, 0, wy + wh, ['#ffe9a8', '#ffc766']), '#1a1030', 3);
+                        if (kind === 'M') { dot(c, wx + ww * .5, wy + wh * .3, 7, '#f1c9a5'); poly(c, [wx + ww * .5 - 9, wy + wh * .42, wx + ww * .5 + 9, wy + wh * .42, wx + ww * .5 + 12, wy + wh * .9, wx + ww * .5 - 12, wy + wh * .9], '#e04aa8'); box(c, wx + ww * .5 - 10, wy + wh * .3 - 13, 20, 6, '#3a8cff'); }
+                        else { dot(c, wx + ww * .5, wy + wh * .55, Math.min(wh * .32, 20), '#f2b84a', '#a5601c', 2); [[-6, -4], [5, 2], [-3, 7]].forEach(([a, b]) => dot(c, wx + ww * .5 + a, wy + wh * .55 + b, 3, '#d9362b')); }
+                        const dx = x + sw * .68, dw = sw * .24; box(c, dx, T + 46, dw, sh - 46, '#3a2414', '#1a1030', 3); dot(c, dx + dw * .8, T + 46 + (sh - 46) * .55, 2.5, '#ffcc00');
+                    });
+                    const cx = w / 2; lamp(c, cx - w * .17, FT - 36, 56, true); lamp(c, cx + w * .17, FT - 36, 56, true);
+                    if (w > 520) { pine(c, cx, FT + 70, 1.4); }
+                },
+                d(c, w, h, FT, t) {
+                    const sw = Math.min(w * .38, 280), T = FT * .16;
+                    sign(c, '🛍️ ROPA', w * .03 + sw / 2, T + 17, 14, '#ffd0ef', 'rgba(40,0,40,.7)'); sign(c, '🍕 PIZZERÍA', w - w * .03 - sw / 2, T + 17, 14, '#ffe2a0', 'rgba(50,10,0,.7)');
+                    if (w > 520) { const r = rnd(5); for (let i = 0; i < 16; i++) { const y = FT + 70 - 8 - r() * 56, x = w / 2 + (r() - .5) * 2 * (50 * (1 - (FT + 70 - y) / 70)) * 1.2; dot(c, x, y, 2.6, `hsl(${(i * 60) % 360},100%,${55 + 25 * Math.sin(t * .15 + i)}%)`); } }
+                    snow(c, w, h, t, 60);
+                }
+            }
+        };
+
+        function drawRoomScene(c, room, w, h, t) {
+            const sc = SCENES[room] || SCENES.plaza, FT = Math.round(h * .32); OUT = room === 'discoteca' ? '#07010f' : room === 'cafeteria' ? '#2a1608' : '#16335e';
+            c.save();
+            c.drawImage(cachedBG(room, w, h, b => sc.s(b, w, h, FT)), 0, 0);
+            sc.d(c, w, h, FT, t);
+            c.restore();
+        }
+        // ===========================================================
+
+        // ===================== MINIJUEGOS YEFREE =====================
+        const MW = 340, MH = 400, HZ = 330;
+        function ot(c, s, x, y, size, fill) { c.save(); c.font = `800 ${size}px "Baloo 2",sans-serif`; c.textAlign = 'center'; c.lineJoin = 'round'; c.lineWidth = size / 3.2; c.strokeStyle = '#14305c'; c.strokeText(s, x, y); c.fillStyle = fill || '#fff'; c.fillText(s, x, y); c.restore(); }
+        function mgArrow(c, x, y, l, col, k) { c.save(); c.translate(x, y); c.rotate([-Math.PI / 2, Math.PI, 0, Math.PI / 2][l]); poly(c, [0, -k, k, 0, k * .4, 0, k * .4, k, -k * .4, k, -k * .4, 0, -k, 0], col); c.restore(); }
+        const MG = { id: null, raf: 0, last: 0, st: {} };
+        const mgCv = () => document.getElementById('mg-canvas');
+        const rnd4 = () => Math.floor(Math.random() * 4);
+        function mgEnd(s, r) { s.over = true; s.reward = r; coins += r; updateDisplays(); saveUserData(); }
+        const MGG = {
+            tiro: {
+                t: '🎯 Tiro de Nieve', h: 'Toca los blancos antes de que desaparezcan. ¡30 segundos!',
+                i: () => ({ time: 30, score: 0, tg: [], sp: 0, fx: [] }),
+                u(s, dt) { s.time -= dt; s.sp -= dt; if (s.sp <= 0) { s.sp = .55; s.tg.push({ x: 40 + Math.random() * 260, y: 90 + Math.random() * 210, l: 1.5, m: 1.5, r: 22 + Math.random() * 10 }); } s.tg.forEach(t => t.l -= dt); s.tg = s.tg.filter(t => t.l > 0); s.fx.forEach(f => f.t += dt); s.fx = s.fx.filter(f => f.t < .5); if (s.time <= 0) mgEnd(s, s.score * 2); },
+                p(s, x, y) { for (let i = s.tg.length - 1; i >= 0; i--) { const t = s.tg[i]; if (Math.hypot(x - t.x, y - t.y) < t.r + 8) { s.score++; s.fx.push({ x: t.x, y: t.y, t: 0 }); s.tg.splice(i, 1); return; } } },
+                r(c, s) {
+                    OUT = '#16335e'; box(c, 0, 0, MW, MH, gr(c, 0, 0, 0, MH, ['#3f9bff', '#cfeaff'])); ell(c, 70, 370, 170, 70, '#f4fbff'); ell(c, 280, 390, 180, 70, '#fff');
+                    s.tg.forEach(t => { const k = .6 + .4 * t.l / t.m; [[1, '#e8453a'], [.66, '#fff'], [.33, '#e8453a']].forEach(([a, col]) => dot(c, t.x, t.y, t.r * k * a, col)); });
+                    s.fx.forEach(f => ot(c, '+1', f.x, f.y - f.t * 50, 18, '#ffe14a'));
+                    ot(c, '⏱ ' + Math.max(0, Math.ceil(s.time)), 55, 30, 20); ot(c, '❄ ' + s.score, MW - 55, 30, 20, '#ffe14a');
+                }
+            },
+            dance: {
+                t: '💃 Dance Contest', h: 'Toca la columna (o usa las flechas del teclado) cuando la flecha llegue al círculo.',
+                i: () => ({ time: 30, score: 0, combo: 0, ar: [], sp: 0, msg: '', mt: 0 }),
+                u(s, dt) { s.time -= dt; s.sp -= dt; s.mt -= dt; if (s.sp <= 0 && s.time > 2) { s.sp = .5; s.ar.push({ l: rnd4(), y: -20 }); } s.ar.forEach(a => a.y += 210 * dt); s.ar = s.ar.filter(a => { if (a.y > HZ + 45) { s.combo = 0; s.msg = '¡Ups!'; s.mt = .5; return false; } return true; }); if (s.time <= 0) mgEnd(s, s.score * 2); },
+                p(s, x) { const l = Math.min(3, Math.floor(x / (MW / 4))); let b = null; s.ar.forEach(a => { if (a.l === l && Math.abs(a.y - HZ) < 42 && (!b || Math.abs(a.y - HZ) < Math.abs(b.y - HZ))) b = a; }); if (b) { const d = Math.abs(b.y - HZ); s.ar.splice(s.ar.indexOf(b), 1); s.combo++; s.score += d < 16 ? 2 : 1; s.msg = d < 16 ? '¡PERFECTO!' : '¡Bien!'; } else { s.combo = 0; s.msg = '¡Ups!'; } s.mt = .5; },
+                r(c, s) {
+                    OUT = '#07010f'; const C = ['#ff2fb3', '#00f0ff', '#ffcc00', '#5aff78'];
+                    box(c, 0, 0, MW, MH, gr(c, 0, 0, 0, MH, ['#1a0838', '#3a1270']));
+                    for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? 'rgba(255,255,255,.06)' : 'rgba(255,255,255,.12)'; c.fillRect(i * 85, 0, 85, MH); mgArrow(c, i * 85 + 42, HZ, i, 'rgba(255,255,255,.22)', 24); dot(c, i * 85 + 42, HZ, 33, null, C[i], 3); }
+                    s.ar.forEach(a => mgArrow(c, a.l * 85 + 42, a.y, a.l, C[a.l], 24));
+                    if (s.mt > 0) ot(c, s.msg, MW / 2, 200, 28, '#ffe14a'); if (s.combo > 1) ot(c, 'x' + s.combo + ' 🔥', MW / 2, 235, 20, '#ff9a3c');
+                    ot(c, '⏱ ' + Math.max(0, Math.ceil(s.time)), 55, 30, 20); ot(c, '⭐ ' + s.score, MW - 55, 30, 20, '#ffe14a');
+                }
+            },
+            simon: {
+                t: '🧠 Simón Puffle', h: 'Mira la secuencia y repítela. ¡Cada ronda vale 5 monedas!',
+                i: () => ({ seq: [rnd4()], ph: 'show', tm: -.7, idx: 0, fl: -1, ft: 0, score: 0 }),
+                u(s, dt) { s.ft -= dt; if (s.ph === 'show') { s.tm += dt; if (s.tm >= s.seq.length * .7) { s.ph = 'in'; s.idx = 0; } } },
+                p(s, x, y) { if (s.ph !== 'in' || y < 100) return; const q = (x > MW / 2 ? 1 : 0) + (y > 245 ? 2 : 0); s.fl = q; s.ft = .25; if (q === s.seq[s.idx]) { if (++s.idx === s.seq.length) { s.score = s.seq.length; s.seq.push(rnd4()); s.ph = 'show'; s.tm = -.7; } } else mgEnd(s, s.score * 5); },
+                r(c, s) {
+                    OUT = '#16335e'; box(c, 0, 0, MW, MH, gr(c, 0, 0, 0, MH, ['#0d3b7a', '#2a7bd6']));
+                    const i = Math.floor(s.tm / .7), lit = s.ph === 'show' && s.tm >= 0 && i < s.seq.length && (s.tm % .7) < .45 ? s.seq[i] : (s.ft > 0 ? s.fl : -1);
+                    [['#8f1d17', '#ff6a5e'], ['#164a8f', '#5aa8ff'], ['#9a7a00', '#ffe14a'], ['#14683a', '#5aff8a']].forEach((col, q) => box(c, (q % 2) * 170 + 8, 104 + (q >> 1) * 145, 154, 137, q === lit ? col[1] : col[0], q === lit ? '#fff' : null, 5));
+                    ot(c, 'Ronda ' + s.seq.length, MW / 2, 36, 22); ot(c, s.ph === 'show' ? '👀 Mira...' : '👆 ¡Tu turno!', MW / 2, 80, 18, '#ffe14a');
+                }
+            }
+        };
+        function mgOpen() { document.getElementById('mg-modal').classList.remove('hidden'); mgMenu(); }
+        function mgClose() { MG.id = null; cancelAnimationFrame(MG.raf); document.getElementById('mg-modal').classList.add('hidden'); }
+        function mgMenu() { MG.id = null; cancelAnimationFrame(MG.raf); document.getElementById('mg-menu').classList.remove('hidden'); document.getElementById('mg-play').classList.add('hidden'); document.getElementById('mg-title').innerText = '🎮 Minijuegos'; }
+        function mgStart(id) { cancelAnimationFrame(MG.raf); MG.id = id; MG.last = 0; MG.st = MGG[id].i(); document.getElementById('mg-menu').classList.add('hidden'); document.getElementById('mg-play').classList.remove('hidden'); document.getElementById('mg-title').innerText = MGG[id].t; document.getElementById('mg-hint').innerText = MGG[id].h; MG.raf = requestAnimationFrame(mgLoop); }
+        function mgLoop(now) {
+            if (!MG.id) return; const dt = Math.min(.05, MG.last ? (now - MG.last) / 1000 : 0); MG.last = now; const s = MG.st, g = MGG[MG.id], c = mgCv().getContext('2d');
+            if (!s.over) g.u(s, dt); g.r(c, s);
+            if (s.over) { c.fillStyle = 'rgba(0,20,50,.72)'; c.fillRect(0, 0, MW, MH); ot(c, '¡Fin del juego!', MW / 2, 150, 30, '#ffe14a'); ot(c, '+' + s.reward + ' 🪙', MW / 2, 210, 36); ot(c, 'Toca para jugar de nuevo', MW / 2, 270, 16); }
+            MG.raf = requestAnimationFrame(mgLoop);
+        }
+        mgCv().addEventListener('pointerdown', e => { if (!MG.id) return; const r = e.target.getBoundingClientRect(); if (MG.st.over) { mgStart(MG.id); return; } MGG[MG.id].p(MG.st, (e.clientX - r.left) * MW / r.width, (e.clientY - r.top) * MH / r.height); });
+        document.addEventListener('keydown', e => { if (MG.id === 'dance' && !MG.st.over) { const k = { ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3 }[e.key]; if (k != null) { e.preventDefault(); MGG.dance.p(MG.st, k * 85 + 40); } } });
+        // ==============================================================
+
+        // ===================== MÚSICA YEFREE =====================
+        const MUS = {
+            L: [{ k: 'pixel', t: 'Pixelated Morning', f: 'PixelatedMorning.mp3' }, { k: 'fancy', t: 'Fancy Day', f: 'FancyDay.mp3' }, { k: 'psycho', t: 'Phsycho Dumb', f: 'PhsychoDumb.mp3' }, { k: 'sunset', t: 'Emotional Sunstet', f: 'EmotionalSunstet.mp3' }],
+            R: { plaza: 'pixel', cafeteria: 'fancy', discoteca: 'psycho', centro: 'sunset', casa: 'sunset' },
+            a: new Audio(), cur: -1, vol: .5, muted: false, auto: true, on: false, fi: 0, an: null, buf: null, tt: 0
+        };
+        try { const sv = JSON.parse(localStorage.getItem('yefree-music') || 'null'); if (sv) { if (typeof sv.vol === 'number') MUS.vol = sv.vol; MUS.muted = !!sv.muted; if (typeof sv.auto === 'boolean') MUS.auto = sv.auto; } } catch (e) { }
+        const musSave = () => { try { localStorage.setItem('yefree-music', JSON.stringify({ vol: MUS.vol, muted: MUS.muted, auto: MUS.auto })); } catch (e) { } };
+        const musVol = () => MUS.muted ? 0 : MUS.vol * (fcTutorialStep > 0 ? .35 : 1);
+        const musNow = () => currentTab === 'casa' ? 'casa' : currentRoom;
+        function musFade(to, ms, cb) { clearInterval(MUS.fi); const f = MUS.a.volume, t0 = Date.now(); MUS.fi = setInterval(() => { const k = Math.min(1, (Date.now() - t0) / ms); MUS.a.volume = Math.max(0, Math.min(1, f + (to - f) * k)); if (k >= 1) { clearInterval(MUS.fi); MUS.fi = 0; if (cb) cb(); } }, 40); }
+        function musToast(t) { const e = document.getElementById('music-toast'); if (!e) return; e.innerText = t; e.style.opacity = 1; clearTimeout(MUS.tt); MUS.tt = setTimeout(() => e.style.opacity = 0, 2600); }
+        function musSet(i, toast) {
+            if (!MUS.on || (i === MUS.cur && !MUS.a.paused)) return; MUS.cur = i;
+            const go = () => { MUS.a.src = MUS.L[i].f; MUS.a.loop = MUS.auto; MUS.a.play().catch(() => { }); musFade(musVol(), 800); musUI(); };
+            if (MUS.a.paused) { MUS.a.volume = 0; go(); } else musFade(0, 500, go);
+            if (toast !== false) musToast('🎵 ' + MUS.L[i].t);
+        }
+        function musRoom(room) { if (!MUS.on || !MUS.auto) return; const i = MUS.L.findIndex(x => x.k === MUS.R[room]); if (i >= 0) musSet(i); }
+        function musAnalyser() {
+            if (MUS.an || !/^https?:$/.test(location.protocol)) return; const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+            const ctx = new AC(), src = ctx.createMediaElementSource(MUS.a); MUS.an = ctx.createAnalyser(); MUS.an.fftSize = 128; src.connect(MUS.an); MUS.an.connect(ctx.destination); MUS.buf = new Uint8Array(MUS.an.frequencyBinCount); MUS.ctx = ctx;
+        }
+        function musLevels(n) { if (!MUS.an || MUS.a.paused) return null; MUS.an.getByteFrequencyData(MUS.buf); const o = [], m = Math.min(MUS.buf.length, 40); for (let i = 0; i < n; i++) o.push(Math.pow(MUS.buf[Math.floor(i / n * m)] / 255, 1.3)); return o; }
+        function musOn() { if (MUS.on) return; MUS.on = true; try { musAnalyser(); } catch (e) { MUS.an = null; } if (MUS.ctx && MUS.ctx.state === 'suspended') MUS.ctx.resume(); }
+        function musUnlock() { if (MUS.on) return; const ov = document.getElementById('intro-video-overlay'); if (ov && !ov.classList.contains('hidden')) return; musOn(); if (MUS.auto) musRoom(musNow()); else musSet(MUS.cur < 0 ? 0 : MUS.cur); }
+        ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, musUnlock, { passive: true }));
+        function musNext(d) { musOn(); MUS.auto = false; musSet(((MUS.cur < 0 ? 0 : MUS.cur) + d + MUS.L.length) % MUS.L.length); musSave(); musUI(); }
+        function musPick(i) { musOn(); MUS.auto = false; musSet(i); musSave(); musUI(); }
+        function musToggle() { musOn(); if (MUS.cur < 0) { musRoom(musNow()); return; } if (MUS.a.paused) { MUS.a.play().catch(() => { }); musFade(musVol(), 400); } else musFade(0, 300, () => MUS.a.pause()); }
+        function musMute() { MUS.muted = !MUS.muted; musSave(); musUI(); }
+        function musVolSet(v) { MUS.vol = v; MUS.muted = false; musSave(); if (!MUS.fi && !MUS.a.paused) MUS.a.volume = musVol(); musUI(); }
+        function musAuto(on) { MUS.auto = on; MUS.a.loop = on; musSave(); if (on) musRoom(musNow()); musUI(); }
+        function musPanelToggle() { document.getElementById('music-panel').classList.toggle('hidden'); musUI(); }
+        function musUI() {
+            const g = id => document.getElementById(id); if (!g('mus-now')) return;
+            g('mus-now').innerText = MUS.cur < 0 ? 'Toca ▶ para empezar' : MUS.L[MUS.cur].t;
+            g('mus-play').innerText = MUS.a.paused ? '▶' : '⏸'; g('mus-mute').innerText = MUS.muted ? '🔇' : '🔊';
+            g('mus-vol').value = Math.round(MUS.vol * 100); g('mus-auto').checked = MUS.auto;
+            g('music-btn').style.opacity = MUS.a.paused || MUS.muted ? .75 : 1;
+            g('mus-list').innerHTML = MUS.L.map((x, i) => `<button onclick="musPick(${i})" class="${i === MUS.cur ? 'bg-[#ffcc00] text-[#442200]' : 'bg-[#004488] text-white'} rounded-xl px-2 py-1 font-display font-black text-xs text-left">🎶 ${x.t}</button>`).join('');
+        }
+        MUS.a.addEventListener('play', musUI); MUS.a.addEventListener('pause', musUI);
+        MUS.a.addEventListener('ended', () => { if (!MUS.auto) musNext(1); });
+        setInterval(() => { if (!MUS.fi && !MUS.a.paused) MUS.a.volume = musVol(); }, 300);
+        const _st = switchTab; switchTab = function (t) { _st.apply(this, arguments); musRoom(t === 'casa' ? 'casa' : currentRoom); };
+        const _ms = mgStart; mgStart = function (id) { _ms(id); if (id === 'dance' && MUS.on && MUS.auto) musSet(1, false); };
+        const _mm = mgMenu; mgMenu = function () { _mm(); musRoom(musNow()); };
+        const _mc = mgClose; mgClose = function () { _mc(); musRoom(musNow()); };
+        window.addEventListener('load', musUI);
+        // ===========================================================
+
+        // --- SALAS VISUALMENTE MEJORADAS ESTILO CLUB PENGUIN ---
+        function renderWorld() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const w = canvas.width; const h = canvas.height;
+
+            drawRoomScene(ctx, currentRoom, w, h, animFrameCounter);
+
+            // Jugadores remotos sincronizados
+            Object.values(remotePlayers).forEach(p => {
+                if(p.currentTab === 'mundo' && (p.currentRoom || 'plaza') === currentRoom) { 
+                    renderRemoteRobot(ctx, p); 
+                }
+            });
+
+            renderYefito(ctx, activePet.x, activePet.y);
+            renderRobot(ctx, player.x, player.y);
+            renderSpeechBubble(ctx, player.x, player.y, player.speech);
+        }
+
+        function renderIgloo() {
+            const w = iglooCanvas.width; const h = iglooCanvas.height;
+            iglooCtx.clearRect(0, 0, w, h);
+            iglooCtx.fillStyle = '#001b3a'; iglooCtx.fillRect(0, 0, w, h);
+            iglooCtx.fillStyle = '#cceeff'; iglooCtx.strokeStyle = '#003366'; iglooCtx.lineWidth = 6;
+            iglooCtx.beginPath(); iglooCtx.arc(w*0.5, h*0.5, Math.min(w, h)*0.4, 0, Math.PI*2); iglooCtx.fill(); iglooCtx.stroke();
+
+            Object.values(remotePlayers).forEach(p => {
+                if(p.currentTab === 'casa' && p.currentIglooHost === currentIglooHost) {
+                    renderRemoteRobot(iglooCtx, p);
+                }
+            });
+
+            renderYefito(iglooCtx, player.x - 35, player.y - 15);
+            renderRobot(iglooCtx, player.x, player.y);
+            renderSpeechBubble(iglooCtx, player.x, player.y, player.speech);
+        }
+
+        function renderRobot(context, x, y) {
+            const currentSheet = player.isMoving ? walkSpriteSheet : idleSpriteSheet;
+            const isLoaded = player.isMoving ? walkLoaded : idleLoaded;
+            const size = 75;
+
+            context.save(); context.translate(x, y);
+            if(player.facingLeft) context.scale(-1, 1);
+
+            if(isLoaded && currentSheet.naturalWidth > 0) {
+                const fw = currentSheet.width / SPRITE_COLS; const fh = currentSheet.height / SPRITE_ROWS;
+                context.drawImage(currentSheet, (player.currentFrame % SPRITE_COLS) * fw, Math.floor(player.currentFrame / SPRITE_COLS) * fh, fw, fh, -size/2, -size/2, size, size);
+            } else {
+                context.fillStyle = player.color; context.beginPath(); context.arc(0, 0, 20, 0, Math.PI*2); context.fill();
+            }
+            drawHatAccessory(context, player.hat, 0, -25);
+            context.restore();
+
+            context.fillStyle = '#002244'; context.font = 'bold 12px "Baloo 2", sans-serif'; context.textAlign = 'center';
+            ot(context, player.name, x, y - 44, 13);
+        }
+
+        function renderRemoteRobot(context, p) {
+            const size = 75;
+            context.save(); context.translate(p.x, p.y);
+            if(p.facingLeft) context.scale(-1, 1);
+
+            if(idleLoaded && idleSpriteSheet.naturalWidth > 0) {
+                const fw = idleSpriteSheet.width / SPRITE_COLS; const fh = idleSpriteSheet.height / SPRITE_ROWS;
+                context.drawImage(idleSpriteSheet, 0, 0, fw, fh, -size/2, -size/2, size, size);
+            } else {
+                context.fillStyle = p.color || '#ffcc00'; context.beginPath(); context.arc(0, 0, 20, 0, Math.PI*2); context.fill();
+            }
+            drawHatAccessory(context, p.hat, 0, -25);
+            context.restore();
+
+            context.fillStyle = '#002244'; context.font = 'bold 12px "Baloo 2", sans-serif'; context.textAlign = 'center';
+            ot(context, p.name, p.x, p.y - 44, 13);
+
+            if(p.speech) {
+                renderSpeechBubble(context, p.x, p.y, p.speech);
+            }
+        }
+
+        function renderYefito(context, x, y) {
+            context.save(); context.translate(x, y);
+            if(player.facingLeft) context.scale(-1, 1);
+            const petSize = 55;
+            if(activePet.aura !== 'none') { context.shadowColor = activePet.aura; context.shadowBlur = 12; }
+            if(yefitoLoaded && yefitoSpriteSheet.naturalWidth > 0) {
+                const fw = yefitoSpriteSheet.width / SPRITE_COLS; const fh = yefitoSpriteSheet.height / SPRITE_ROWS;
+                context.drawImage(yefitoSpriteSheet, (activePet.currentFrame % SPRITE_COLS) * fw, Math.floor(activePet.currentFrame / SPRITE_COLS) * fh, fw, fw, -petSize/2, -petSize/2, petSize, petSize);
+            }
+            context.restore();
+        }
+
+        function drawHatAccessory(ctx, hatType, x, y) {
+            ctx.fillStyle = '#ff2244';
+            if(hatType === 'cap') { ctx.beginPath(); ctx.arc(x, y, 14, Math.PI, 0, false); ctx.fill(); ctx.fillRect(x, y - 2, 18, 4); }
+            else if(hatType === 'tophat') { ctx.fillStyle = '#111'; ctx.fillRect(x - 10, y - 16, 20, 16); ctx.fillRect(x - 14, y, 28, 4); }
+            else if(hatType === 'headphones') { ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y + 8, 16, Math.PI, 0, false); ctx.stroke(); }
+            else if(hatType === 'glasses') { ctx.fillStyle = '#000'; ctx.fillRect(x - 12, y + 14, 24, 6); }
+        }
+
+        function renderPreview() {
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            renderYefito(previewCtx, 110, 80); renderRobot(previewCtx, 60, 95);
+        }
+        function renderHomePreview() {
+            homePreviewCtx.clearRect(0, 0, homePreviewCanvas.width, homePreviewCanvas.height);
+            renderYefito(homePreviewCtx, 100, 75); renderRobot(homePreviewCtx, 55, 90);
+        }
+
+        function renderSpeechBubble(context, x, y, text) {
+            if(text) {
+                context.fillStyle = '#ffffff'; context.strokeStyle = '#002244'; context.lineWidth = 2;
+                context.beginPath(); context.roundRect(x - 50, y - 78, 100, 26, 10); context.fill(); context.stroke();
+                context.fillStyle = '#001122'; context.font = 'bold 11px Outfit, sans-serif'; context.textAlign = 'center';
+                context.fillText(text, x, y - 61);
+            }
+        }
+
+        function openProfileModal() { document.getElementById('input-username').value = player.name; document.getElementById('profile-modal').classList.remove('hidden'); }
+        function closeProfileModal() { document.getElementById('profile-modal').classList.add('hidden'); }
+        function saveProfileName() {
+            const newName = document.getElementById('input-username').value.trim();
+            if(newName) {
+                player.name = newName; updateDisplays();
+                currentIglooHost = newName; saveUserData();
+            }
+            closeProfileModal();
+        }
+
+        function openCustomizerModal() { document.getElementById('customizer-modal').classList.remove('hidden'); if(fcTutorialStep === 2) { fcTutorialStep = 3; setTimeout(applySpotlightStep, 100); } }
+        function closeCustomizerModal() { document.getElementById('customizer-modal').classList.add('hidden'); if(fcTutorialStep === 3) { fcTutorialStep = 4; setTimeout(applySpotlightStep, 100); } }
+        function saveAndCloseCustomizer() { saveUserData(); closeCustomizerModal(); }
+
+        function setPlayerColor(color) { player.color = color; }
+        function setPlayerHat(hat) { player.hat = hat; }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            ['mundo', 'casa'].forEach(t => { const el = document.getElementById(`view-${t}`); if(el) el.classList.add('hidden'); });
+            const activeEl = document.getElementById(`view-${tab}`); if(activeEl) activeEl.classList.remove('hidden');
+            resizeCanvases();
+        }
+
+        function switchRoom(room) { 
+            currentRoom = room; 
+            switchTab('mundo'); 
+            updateDisplays();
+        }
+
+        function openIglooDirectoryModal() {
+            const container = document.getElementById('igloo-list-container'); container.innerHTML = '';
+            
+            container.innerHTML += `
+                <div class="bg-[#004488] border-2 border-[#002244] p-2.5 rounded-2xl flex justify-between items-center">
+                    <div>
+                        <div class="font-display font-black text-white text-sm">Iglú de ${player.name}</div>
+                        <div class="text-[10px] text-cyan-200">Tu Iglú personal</div>
+                    </div>
+                    <button onclick="teleportToIgloo('${player.name}')" class="cp-button text-[#442200] font-display font-black px-3 py-1 rounded-xl text-xs">Visitar</button>
+                </div>
+            `;
+
+            document.getElementById('igloo-directory-modal').classList.remove('hidden');
+        }
+        function closeIglooDirectoryModal() { document.getElementById('igloo-directory-modal').classList.add('hidden'); }
+
+        function teleportToIgloo(ownerName) {
+            currentIglooHost = ownerName;
+            document.getElementById('igloo-owner-title').innerText = `🏠 Iglú de ${ownerName}`;
+            closeIglooDirectoryModal(); document.getElementById('main-home-menu').classList.add('hidden');
+            switchTab('casa');
+        }
+        function teleportToMyIgloo() { teleportToIgloo(player.name); }
+        function togglePublicIgloo() {
+            isMyIglooPublic = !isMyIglooPublic;
+            document.getElementById('btn-toggle-public').innerText = isMyIglooPublic ? '🌐 Público' : '🔒 Privado';
+        }
+
+        function appendChatMessageUI(name, text) {
+            const container = document.getElementById('chat-messages');
+            if(container) {
+                container.innerHTML += `<div class="leading-snug bg-[#003366] p-2 rounded-xl border border-cyan-500/20"><span class="font-display text-xs font-black text-[#ffcc00]">${name}</span><p class="text-white mt-0.5 text-xs">${text}</p></div>`;
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim(); if(!text) return;
+            player.speech = text; player.speechTimer = 180;
+            appendChatMessageUI(player.name, text);
+            broadcastChatMessage(text);
+            input.value = '';
+            setTimeout(() => { player.speech = ''; }, 4000);
+        }
+
+        function sendMobileChatMessage() {
+            const input = document.getElementById('mobile-chat-input');
+            const text = input.value.trim(); if(!text) return;
+            player.speech = text; player.speechTimer = 180;
+            appendChatMessageUI(player.name, text);
+            broadcastChatMessage(text);
+            input.value = '';
+            setTimeout(() => { player.speech = ''; }, 4000);
+        }
+
+        function toggleEditIgloo() {
+            if(currentIglooHost !== player.name) { alert('Solo puedes editar tu propio iglú.'); return; }
+            isEditingIgloo = !isEditingIgloo;
+            document.getElementById('edit-mode-banner').classList.toggle('hidden', !isEditingIgloo);
+            document.getElementById('btn-edit-igloo').innerText = isEditingIgloo ? '🛑 Cancelar' : '🛠️ Editar';
+        }
+
+        function openFurnitureShop() { document.getElementById('furniture-shop-modal').classList.remove('hidden'); }
+        function closeFurnitureShop() { document.getElementById('furniture-shop-modal').classList.add('hidden'); }
+
+        function buyFurniture(name, emoji, price) {
+            if(coins < price) { alert('¡No tienes suficientes monedas!'); return; }
+            coins -= price; updateDisplays(); closeFurnitureShop();
+            selectedFurnitureToPlace = { name, emoji }; teleportToMyIgloo(); isEditingIgloo = true;
+            document.getElementById('edit-mode-banner').classList.remove('hidden'); saveUserData();
+        }
+
+        function openMapModal() { document.getElementById('map-modal').classList.remove('hidden'); }
+        function closeMapModal() { document.getElementById('map-modal').classList.add('hidden'); }
+
+        window.addEventListener('load', () => { resizeCanvases(); requestAnimationFrame(gameLoop); });
+    </script>
+</body>
+</html>
