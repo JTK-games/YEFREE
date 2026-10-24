@@ -1,2 +1,2 @@
 # YEFREE
-A new gud game
+A new good game
